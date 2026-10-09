@@ -1,0 +1,54 @@
+package com.baseshop.order.controller;
+
+import com.baseshop.common.dto.PagingResDto;
+import com.baseshop.common.handler.ApiResponse;
+import com.baseshop.order.dto.OrderCreateReqDto;
+import com.baseshop.order.dto.OrderListReqDto;
+import com.baseshop.order.dto.OrderListResDto;
+import com.baseshop.order.service.OrderService;
+import com.baseshop.security.userdetails.CustomUserDetails;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/v1/order")
+@RequiredArgsConstructor
+@Tag(name = "주문 API")
+public class OrderController {
+
+    private final OrderService orderService;
+
+    @PostMapping
+    @Operation(summary = "주문 등록")
+    public ApiResponse<Long> create(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestBody OrderCreateReqDto orderCreateReqDto) {
+        Long memberId = userDetails.getMemberId();
+
+        return ApiResponse.success(orderService.create(memberId, orderCreateReqDto));
+    }
+
+    @GetMapping
+    @Operation(summary = "주문 목록")
+    public ApiResponse<PagingResDto<OrderListResDto>> getOrderList(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            OrderListReqDto orderListReqDto){
+        Long memberId = userDetails.getMemberId();
+
+        return ApiResponse.success(orderService.getOrderList(memberId, orderListReqDto));
+    }
+    
+    @PutMapping("/{id}/cancel")
+    @Operation(summary = "주문 취소")
+    public ApiResponse<Long> cancel(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long id){
+        Long memberId = userDetails.getMemberId();
+
+        return ApiResponse.success(orderService.cancel(memberId, id));
+    }
+
+}
