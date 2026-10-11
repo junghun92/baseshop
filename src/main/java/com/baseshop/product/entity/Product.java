@@ -63,11 +63,15 @@ public class Product extends BaseEntity {
 
         validateOnSale();
 
+        validateQuantity(quantity);
+        this.quantity -= quantity;
+    }
+
+    public void validateQuantity(int quantity) {
         if (this.quantity < quantity) {
             String str = String.format("재고가 부족합니다. (상품명: %s, 현재재고: %d, 주문수량: %d)", this.name, this.quantity, quantity);
             throw new IllegalArgumentException(str);
         }
-        this.quantity -= quantity;
     }
 
     public void validateOnSale() {

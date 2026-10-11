@@ -62,6 +62,8 @@ public class LoginFilter extends AbstractAuthenticationProcessingFilter {
 
         } catch (IOException e) {
             throw new RuntimeException(e);
+        } catch (Exception e) {
+            throw new AuthenticationServiceException("요청 형식이 올바르지 않습니다.");
         }
 
     }

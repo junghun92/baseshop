@@ -36,6 +36,10 @@ public class CartService {
     public Long create(Long memberId, CartCreateReqDto cartCreateReqDto) {
         Product product = productRepository.findById(cartCreateReqDto.getProductId()).orElseThrow(() -> new EntityNotFoundException("존재하지 않는 상품입니다."));
 
+        //재고체크
+        product.validateQuantity(cartCreateReqDto.getQuantity());
+
+        //판매상태 체크
         product.validateOnSale();
 
         // 이미 담긴 상품이면 수량만 증가

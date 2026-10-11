@@ -1,11 +1,11 @@
 package com.baseshop.member.controller;
 
 import com.baseshop.common.handler.ApiResponse;
-import com.baseshop.member.dto.LoginReqDto;
 import com.baseshop.member.dto.MemberCreateReqDto;
 import com.baseshop.member.service.MemberService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -22,7 +22,7 @@ public class MemberController {
 
     @PostMapping
     @Operation(summary = "회원가입")
-    public ApiResponse<Long> create(@RequestBody MemberCreateReqDto memberCreateReqDto){
+    public ApiResponse<Long> create(@Valid @RequestBody MemberCreateReqDto memberCreateReqDto){
         return ApiResponse.success(memberService.create(memberCreateReqDto));
     }
 
