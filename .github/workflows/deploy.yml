@@ -17,6 +17,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: 0. 설정 Secret 확인
+        env:
+          PROPS: ${{ secrets.APPLICATION_PROPERTIES }}
+        run: |
+          if [ -z "$PROPS" ]; then
+            echo "APPLICATION_PROPERTIES Secret이 비어있습니다."
+            exit 1
+          fi
+
       - name: 1. 코드 가져오기
         uses: actions/checkout@v4
 
@@ -45,7 +54,14 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           script: |
             cd /opt/baseshop/baseshop-deploy
+            
+            # properties 파일을 Secret 내용으로 덮어쓰기
+            cat > app-config/application.properties << 'EOF'
+            ${{ secrets.APPLICATION_PROPERTIES }}
+            EOF
+            chmod 600 app-config/application.properties
+
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker compose pull baseshop-spring
-            docker compose up -d baseshop-spring
+            docker compose up -d --force-recreate baseshop-spring
             docker image prune -f
