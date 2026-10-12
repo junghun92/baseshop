@@ -20,19 +20,22 @@ public class JWTUtil {
     private final long refreshTokenExpireTime;
     private final String accessTokenName;
     private final String refreshTokenName;
+    private final boolean cookieSecure;
 
     public JWTUtil(
             @Value("${jwt.secret}") String secret,
             @Value("${jwt.access-token-expire-time}") long accessTokenExpireTime,
             @Value("${jwt.refresh-token-expire-time}") long refreshTokenExpireTime,
             @Value("${jwt.access-token-name}") String accessTokenName,
-            @Value("${jwt.refresh-token-name}") String refreshTokenName) {
+            @Value("${jwt.refresh-token-name}") String refreshTokenName,
+            @Value("${jwt.cookie-secure}") boolean cookieSecure) {
 
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.accessTokenExpireTime = accessTokenExpireTime;
         this.refreshTokenExpireTime = refreshTokenExpireTime;
         this.accessTokenName = accessTokenName;
         this.refreshTokenName = refreshTokenName;
+        this.cookieSecure = cookieSecure;
     }
 
     /**
@@ -90,11 +93,11 @@ public class JWTUtil {
     }
 
     private ResponseCookie refreshCookie(String value, Duration maxAge) {
-        //TODO: 로컬,개발,운영 환경에 따라 설정.
         return ResponseCookie.from(refreshTokenName, value)
                 .httpOnly(true)         // 스크립트 접근 차단
-                .secure(false)          // true 설정시 HTTPS에서만 전송 가능 (로컬 테스트는 false)
-                .sameSite("Lax")        // 다른 사이트에서 보낸 요청에 쿠키를 붙일지 결정, none은 secure(true)가 필수라 http에서는 쿠키가 저장 안 됨
+                .secure(cookieSecure)          // true 설정시 HTTPS에서만 전송 가능 (로컬 테스트는 false)
+                .sameSite("Lax")        // 다른 사이트에서 보낸 POST/fetch 에는 쿠키 안 붙임(CSRF 방어). 프론트·API 같은 도메인이라 Lax로 충분
+                                        // None 은 프론트·API 도메인이 다를 때만 사용 (Secure 필수)
                 .path("/")             // 주소범위
                 .maxAge(maxAge) //유효기간
                 .build();

@@ -19,7 +19,7 @@ jobs:
     steps:
       - name: 0. 설정 Secret 확인
         env:
-          PROPS: ${{ secrets.APPLICATION_PROPERTIES }}
+          PROPS: ${{ secrets.APPLICATION_PROD_PROPERTIES }}
         run: |
           if [ -z "$PROPS" ]; then
             echo "APPLICATION_PROPERTIES Secret이 비어있습니다."
@@ -56,10 +56,11 @@ jobs:
             cd /opt/baseshop/baseshop-deploy
             
             # properties 파일을 Secret 내용으로 덮어쓰기
-            cat > app-config/application.properties << 'EOF'
-            ${{ secrets.APPLICATION_PROPERTIES }}
+            # 운영 설정 파일 생성 (★ 파일명 application-prod.properties)
+            cat > app-config/application-prod.properties << 'EOF'
+            ${{ secrets.APPLICATION_PROD_PROPERTIES }}
             EOF
-            chmod 600 app-config/application.properties
+            chmod 600 app-config/application-prod.properties
 
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker compose pull baseshop-spring

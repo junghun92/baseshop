@@ -6,7 +6,7 @@ build/
 !**/src/test/**/build/
 
 ### 비밀값 ###
-application.properties
+application*.properties
 
 ### QueryDSL 생성 파일 (빌드할 때 자동 생성) ###
 src/main/generated/
