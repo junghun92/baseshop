@@ -47,16 +47,12 @@ public class Order extends BaseEntity {
         this.totalPrice = totalPrice;
     }
 
-    // 주문취소
+    // 주문취소 (상태변경)
     public void cancel() {
         if(this.orderStatusType != OrderStatusType.ORDER){
             throw new IllegalArgumentException("취소할 수 없는 주문입니다.");
         }
 
         this.orderStatusType = OrderStatusType.CANCEL;
-
-        for (OrderItem orderItem : this.orderItemList) {
-            orderItem.cancel(); //재고 복구
-        }
     }
 }

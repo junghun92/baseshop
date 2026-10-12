@@ -47,7 +47,6 @@ public class Product extends BaseEntity {
         this.name = productUpdateReqDto.getName();
         this.description = productUpdateReqDto.getDescription();
         this.price = productUpdateReqDto.getPrice();
-        this.quantity = productUpdateReqDto.getQuantity();
         this.productStatusType = productUpdateReqDto.getProductStatusType();
     }
 
@@ -83,6 +82,19 @@ public class Product extends BaseEntity {
     // 재고추가
     public void addQuantity(int quantity) {
         this.quantity += quantity;
+    }
+
+    public void changeQuantity(int changeQuantity){
+        if (changeQuantity == 0) {
+            throw new IllegalArgumentException("변경 수량은 0이 될 수 없습니다. (입고: 양수, 차감: 음수)");
+        }
+
+        if (this.quantity + changeQuantity < 0) {
+            String str = String.format("재고는 0개 미만이 될 수 없습니다. (상품명: %s, 현재재고: %d, 변경수량: %d)", this.name, this.quantity, changeQuantity);
+            throw new IllegalArgumentException(str);
+        }
+
+        this.quantity += changeQuantity;
     }
 
 }

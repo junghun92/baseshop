@@ -25,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -64,8 +65,11 @@ public class OrderService {
         List<OrderItem> orderItemList = new ArrayList<>();
         List<Long> cartIdList = new ArrayList<>();
 
+        // 상품ID 순서로 정렬 (재고 동시성 이슈, 데드락 방지)
+        items.sort(Comparator.comparing(OrderItemCreateReqDto::getProductId));
+
         for (OrderItemCreateReqDto item : items) {
-            Product product = productRepository.findById(item.getProductId()).orElseThrow(() -> new EntityNotFoundException("존재하지 않는 상품입니다."));
+            Product product = productRepository.findByIdForUpdate(item.getProductId()).orElseThrow(() -> new EntityNotFoundException("존재하지 않는 상품입니다."));
 
             // 주문상품 생성, 상품 재고차감 (변경 감지로 UPDATE)
             OrderItem orderItem = OrderItem.createOrderItem(savedOrder, product, item.getQuantity());
@@ -102,13 +106,26 @@ public class OrderService {
 
     @Transactional
     public Long cancel(Long memberId, Long id) {
-        Order order = orderRepository.findById(id).orElseThrow(() -> new EntityNotFoundException("해당 주문내역이 없습니다."));
+        // 주문 row 락 (중복 취소 방지)
+        Order order = orderRepository.findByIdForUpdate(id).orElseThrow(() -> new EntityNotFoundException("해당 주문내역이 없습니다."));
 
         if(!order.getMember().getId().equals(memberId)){
             throw new AccessDeniedException("본인의 주문만 취소할 수 있습니다.");
         }
 
+        // 상태변경 - CANCEL
         order.cancel();
+
+        // 재고 복구 : 주문할 때랑 똑같이 상품ID 순서로 락 걸고 처리
+        List<OrderItem> orderItemList = order.getOrderItemList();
+        orderItemList.sort(Comparator.comparing(orderItem -> orderItem.getProduct().getId()));
+
+        for (OrderItem orderItem : orderItemList) {
+            Product product = productRepository.findByIdForUpdate(orderItem.getProduct().getId())
+                    .orElseThrow(() -> new EntityNotFoundException("존재하지 않는 상품입니다."));
+
+            product.addQuantity(orderItem.getQuantity());
+        }
 
         return order.getId();
     }

@@ -70,4 +70,13 @@ public class ProductService {
 
         return new PagingResDto<>(productList.map(ProductListResDto::new));
     }
+
+    @Transactional
+    public Long updateQuantity(Long id, QuantityUpdateReqDto quantityUpdateReqDto) {
+        Product product = productRepository.findByIdForUpdate(id).orElseThrow(() -> new EntityNotFoundException("등록 된 상품이 없습니다."));
+
+        product.changeQuantity(quantityUpdateReqDto.getChangeQuantity());
+
+        return product.getId();
+    }
 }

@@ -51,4 +51,13 @@ public class ProductController {
         return ApiResponse.success(productService.getProductList(productListReqDto));
     }
 
+    @PutMapping("/{id}/quantity")
+    @Operation(summary = "상품 재고 조정 (ADMIN)")
+    public ApiResponse<Long> updateQuantity(
+            @PathVariable Long id,
+            @Valid @RequestBody QuantityUpdateReqDto quantityUpdateReqDto){
+
+        return ApiResponse.success(productService.updateQuantity(id, quantityUpdateReqDto));
+    }
+
 }

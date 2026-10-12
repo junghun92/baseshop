@@ -47,8 +47,4 @@ public class OrderItem extends BaseEntity {
         return (long) this.orderPrice * this.quantity;
     }
 
-    //주문취소 -> 재고복구
-    public void cancel() {
-        this.product.addQuantity(this.quantity);
-    }
 }

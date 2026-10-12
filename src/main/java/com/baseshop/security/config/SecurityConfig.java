@@ -43,7 +43,8 @@ public class SecurityConfig {
         http.httpBasic(AbstractHttpConfigurer::disable);
 
         // CORS 설정
-        http.cors(cors -> cors.configurationSource(corsConfigurationSource()));
+        //http.cors(cors -> cors.configurationSource(corsConfigurationSource()));
+        http.cors(AbstractHttpConfigurer::disable);
 
         // 경로별 인가
         http.authorizeHttpRequests(auth -> auth
@@ -61,6 +62,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/product/*").permitAll() // 상품상세
                         .requestMatchers(HttpMethod.POST, "/api/v1/product").hasAuthority("ADMIN") // 상품등록
                         .requestMatchers(HttpMethod.PUT, "/api/v1/product/*").hasAuthority("ADMIN") // 상품수정
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/product/*/quantity").hasAuthority("ADMIN") // 상품 재고수정
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/product/*").hasAuthority("ADMIN") // 상품 판매중지
 
                         .requestMatchers(HttpMethod.GET, "/api/v1/cart").hasAnyAuthority("USER", "ADMIN") // 내 장바구니 리스트
@@ -102,21 +104,21 @@ public class SecurityConfig {
     /**
      * CORS 설정
      */
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration config = new CorsConfiguration();
-        //TODO: 개발환경에 따라 수정
-        config.addAllowedOrigin("http://localhost:5173");
-        config.addAllowedHeader("*");
-        config.addAllowedMethod("*");
-        config.setAllowCredentials(true);
-
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        // 모든 API에 동일한 설정 적용
-        source.registerCorsConfiguration("/**", config);
-
-        return source;
-    }
+//    @Bean
+//    public CorsConfigurationSource corsConfigurationSource() {
+//        CorsConfiguration config = new CorsConfiguration();
+//        //TODO: 개발환경에 따라 수정
+//        config.addAllowedOrigin("http://localhost:5173");
+//        config.addAllowedHeader("*");
+//        config.addAllowedMethod("*");
+//        config.setAllowCredentials(true);
+//
+//        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+//        // 모든 API에 동일한 설정 적용
+//        source.registerCorsConfiguration("/**", config);
+//
+//        return source;
+//    }
 
     @Bean
     public PasswordEncoder passwordEncoder(){

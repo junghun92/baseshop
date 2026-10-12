@@ -24,10 +24,6 @@ public class ProductUpdateReqDto {
     @Schema(description = "상품가격", example = "1000")
     private int price;
 
-    @PositiveOrZero(message = "재고는 0개 이상이어야 합니다.")
-    @Schema(description = "상품재고", example = "99")
-    private int quantity;
-
     @NotNull(message = "판매 상태를 선택해 주세요.")
     @Schema(description = "상품상태(판매중: SALE, 품절: SOLD_OUT, 판매중지: STOP)", example = "SALE")
     private ProductStatusType productStatusType;
