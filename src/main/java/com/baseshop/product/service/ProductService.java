@@ -1,6 +1,7 @@
 package com.baseshop.product.service;
 
 import com.baseshop.common.dto.PagingResDto;
+import com.baseshop.common.file.FileStore;
 import com.baseshop.product.dto.*;
 import com.baseshop.product.entity.Product;
 import com.baseshop.product.repository.ProductQueryRepository;
@@ -19,6 +20,7 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final ProductQueryRepository productQueryRepository;
     private final ProductFileService productFileService;
+    private final FileStore fileStore;
 
     @Transactional
     public Long create(ProductCreateReqDto productCreateReqDto) {
@@ -69,9 +71,13 @@ public class ProductService {
 
     @Transactional(readOnly = true)
     public PagingResDto<ProductListResDto> getProductList(ProductListReqDto productListReqDto) {
-        Page<Product> productList = productQueryRepository.findProductList(productListReqDto);
+        Page<ProductListQueryDto> productList = productQueryRepository.findProductList(productListReqDto);
 
-        return new PagingResDto<>(productList.map(ProductListResDto::new));
+        return new PagingResDto<>(productList.map(dto -> {
+            String storeFilePath = dto.getStoreFilePath();
+            String imageUrl = storeFilePath != null ? fileStore.getUrl(storeFilePath) : null;
+            return new ProductListResDto(dto.getProduct(), imageUrl);
+        }));
     }
 
     @Transactional

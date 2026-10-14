@@ -37,8 +37,6 @@ public class PagingResDto<T> {
     @Schema(description = "마지막 페이지 여부 (true: 마지막페이지 맞음, false: 아님)")
     private boolean lastPage;
 
-    //TODO: Mybatis도 작업예정
-
     //JPA
     public PagingResDto(Page<T> page) {
         this.content = page.getContent();

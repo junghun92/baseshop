@@ -10,7 +10,7 @@ public interface FileStore {
 
     void deleteStoreFile(UploadFile uploadFile);
 
-    String getUrl(UploadFile uploadFile);
+    String getUrl(String storeFilePath);
 
     // 트랜잭션이 커밋되지 못하고 끝나면 방금 저장한 파일 삭제
     default void deleteFileIfRollback(UploadFile uploadFile) {

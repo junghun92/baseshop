@@ -77,8 +77,8 @@ public class R2FileStore implements FileStore {
     }
 
     @Override
-    public String getUrl(UploadFile uploadFile) {
-        return publicUrl + uploadFile.getStoreFilePath();
+    public String getUrl(String storeFilePath) {
+        return publicUrl + storeFilePath;
     }
 
 

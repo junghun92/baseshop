@@ -26,12 +26,16 @@ public class ProductListResDto {
     @Schema(description = "상품상태(판매중: SALE, 품절: SOLD_OUT, 판매중지: STOP)", example = "SALE")
     private ProductStatusType productStatusType;
 
-    public ProductListResDto(Product product) {
+    @Schema(description = "이미지 URL")
+    private String imageUrl;   // 이미지 없으면 null
+
+    public ProductListResDto(Product product, String imageUrl) {
         this.id = product.getId();
         this.name = product.getName();
         this.description = product.getDescription();
         this.price = product.getPrice();
         this.quantity = product.getQuantity();
         this.productStatusType = product.getProductStatusType();
+        this.imageUrl = imageUrl;
     }
 }

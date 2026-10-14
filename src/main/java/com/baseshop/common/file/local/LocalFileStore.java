@@ -47,8 +47,8 @@ public class LocalFileStore implements FileStore {
     }
 
     @Override
-    public String getUrl(UploadFile uploadFile) {
-        return fileUrl + uploadFile.getStoreFilePath();
+    public String getUrl(String storeFilePath) {
+        return fileUrl + storeFilePath;
     }
 
     @Override

@@ -38,13 +38,13 @@ public class ProductFileService {
         ProductFile productFile = new ProductFile(product, uploadFile);
         productFileRepository.save(productFile);
 
-        return new ProductFileResDto(uploadFile.getOriginalFileName(), fileStore.getUrl(uploadFile));
+        return new ProductFileResDto(uploadFile.getOriginalFileName(), fileStore.getUrl(uploadFile.getStoreFilePath()));
     }
 
     // 상품 상세용: 사용 중인 이미지 URL (없으면 null)
     public String getProductImageUrl(Long productId) {
         return productFileRepository.findByProductIdAndDelYn(productId, "N")
-                .map(productFile -> fileStore.getUrl(productFile.getUploadFile()))
+                .map(productFile -> fileStore.getUrl(productFile.getUploadFile().getStoreFilePath()))
                 .orElse(null);
     }
 
