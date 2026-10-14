@@ -76,6 +76,9 @@ public class SecurityConfig {
 
                         .requestMatchers(HttpMethod.POST, "/api/v1/member").permitAll()
 
+                        .requestMatchers(HttpMethod.POST, "/api/v1/product/*/file").hasAnyAuthority("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll() // 이미지
+
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll()
 

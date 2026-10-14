@@ -54,6 +54,12 @@ dependencies {
 
     // 이메일 검증
     implementation 'commons-validator:commons-validator:1.9.0'
+
+    // R2가 S3 호환 API를 제공해서 AWS SDK를 그대로 썼음
+    // AWS SDK 버전 통일 (R2는 S3 호환이라 AWS SDK 사용)
+    implementation platform('software.amazon.awssdk:bom:2.31.0')
+    // S3 클라이언트 (접속 주소는 R2Config에서 R2로 변경)
+    implementation 'software.amazon.awssdk:s3'
 }
 
 tasks.named('test') {

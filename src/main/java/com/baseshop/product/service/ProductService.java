@@ -18,6 +18,7 @@ public class ProductService {
 
     private final ProductRepository productRepository;
     private final ProductQueryRepository productQueryRepository;
+    private final ProductFileService productFileService;
 
     @Transactional
     public Long create(ProductCreateReqDto productCreateReqDto) {
@@ -53,6 +54,7 @@ public class ProductService {
     @Transactional(readOnly = true)
     public ProductDetailResDto getProductDetail(Long id) {
         Product product = productRepository.findById(id).orElseThrow(() -> new EntityNotFoundException("등록 된 상품이 없습니다."));
+        String imageUrl = productFileService.getProductImageUrl(id);
 
         return ProductDetailResDto.builder()
                 .id(product.getId())
@@ -61,6 +63,7 @@ public class ProductService {
                 .price(product.getPrice())
                 .quantity(product.getQuantity())
                 .productStatusType(product.getProductStatusType())
+                .imageUrl(imageUrl)
                 .build();
     }
 

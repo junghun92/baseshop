@@ -7,8 +7,10 @@ import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
@@ -16,6 +18,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 @Slf4j
 @RestControllerAdvice
@@ -37,6 +41,26 @@ public class GlobalExceptionHandler {
 
         log.warn("Validation 에러 발생: {}", message);
         return ApiResponse.fail("INVALID_INPUT_VALUE", message);
+    }
+
+    /**
+     * [409 CONFLICT] 락 대기시간 초과 / 데드락 (동시 주문 몰림)
+     */
+    @ExceptionHandler(PessimisticLockingFailureException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ApiResponse<Void> handlePessimisticLockingFailureException(PessimisticLockingFailureException e) {
+        log.warn("락 획득 실패: {}", e.getMessage());
+        return ApiResponse.fail("LOCK_CONFLICT", "주문이 몰려 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    }
+
+
+    /**
+     * [413 PAYLOAD_TOO_LARGE] 파일 사이즈 오류
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    @ResponseStatus(HttpStatus.PAYLOAD_TOO_LARGE)
+    public ApiResponse<Void> handleMaxUploadSize(MaxUploadSizeExceededException e) {
+        return ApiResponse.fail("PAYLOAD_TOO_LARGE", "파일 크기는 최대 5MB까지 업로드할 수 있습니다.");
     }
 
     /**

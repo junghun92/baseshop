@@ -26,13 +26,17 @@ public class ProductDetailResDto {
     @Schema(description = "상품상태(판매중: SALE, 품절: SOLD_OUT, 판매중지: STOP)", example = "SALE")
     private ProductStatusType productStatusType;
 
+    @Schema(description = "이미지 URL")
+    private String imageUrl;
+
     @Builder
-    public ProductDetailResDto(Long id, String name, String description, int price, int quantity, ProductStatusType productStatusType) {
+    public ProductDetailResDto(Long id, String name, String description, int price, int quantity, ProductStatusType productStatusType, String imageUrl) {
         this.id = id;
         this.name = name;
         this.description = description;
         this.price = price;
         this.quantity = quantity;
         this.productStatusType = productStatusType;
+        this.imageUrl = imageUrl;
     }
 }
