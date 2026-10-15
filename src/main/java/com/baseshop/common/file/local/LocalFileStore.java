@@ -41,8 +41,6 @@ public class LocalFileStore implements FileStore {
             throw new IllegalStateException("파일 저장에 실패했습니다.", e);
         }
 
-        deleteFileIfRollback(uploadFile);
-
         return uploadFile;
     }
 

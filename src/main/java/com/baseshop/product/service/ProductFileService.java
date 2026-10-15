@@ -35,8 +35,12 @@ public class ProductFileService {
         // 파일 업로드
         UploadFile uploadFile = fileStore.createStoreFile(multipartFile, "product", FileType.IMAGE);
 
-        ProductFile productFile = new ProductFile(product, uploadFile);
-        productFileRepository.save(productFile);
+        try {
+            productFileRepository.saveAndFlush(new ProductFile(product, uploadFile));
+        } catch (Exception e) {
+            fileStore.deleteStoreFile(uploadFile); // DB오류 발생시 저장한 파일 삭제
+            throw new RuntimeException(e);
+        }
 
         return new ProductFileResDto(uploadFile.getOriginalFileName(), fileStore.getUrl(uploadFile.getStoreFilePath()));
     }
