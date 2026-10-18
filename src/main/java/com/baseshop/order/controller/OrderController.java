@@ -2,13 +2,12 @@ package com.baseshop.order.controller;
 
 import com.baseshop.common.dto.PagingResDto;
 import com.baseshop.common.handler.ApiResponse;
-import com.baseshop.order.dto.OrderCreateReqDto;
-import com.baseshop.order.dto.OrderListReqDto;
-import com.baseshop.order.dto.OrderListResDto;
+import com.baseshop.order.dto.*;
 import com.baseshop.order.service.OrderService;
 import com.baseshop.security.userdetails.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -23,12 +22,18 @@ public class OrderController {
 
     @PostMapping
     @Operation(summary = "주문 등록")
-    public ApiResponse<Long> create(
+    public ApiResponse<OrderCreateResDto> create(
             @AuthenticationPrincipal CustomUserDetails userDetails,
-            @RequestBody OrderCreateReqDto orderCreateReqDto) {
+            @Valid @RequestBody OrderCreateReqDto orderCreateReqDto) {
         Long memberId = userDetails.getMemberId();
 
         return ApiResponse.success(orderService.create(memberId, orderCreateReqDto));
+    }
+
+    @PostMapping("/sheet")
+    @Operation(summary = "주문서")
+    public ApiResponse<OrderSheetResDto> getOrderSheet(@Valid @RequestBody OrderSheetReqDto orderSheetReqDto) {
+        return ApiResponse.success(orderService.getOrderSheet(orderSheetReqDto));
     }
 
     @GetMapping

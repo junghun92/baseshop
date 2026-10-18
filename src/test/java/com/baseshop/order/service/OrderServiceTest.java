@@ -4,7 +4,6 @@ import com.baseshop.member.entity.Member;
 import com.baseshop.member.repository.MemberRepository;
 import com.baseshop.member.type.MemberRoleType;
 import com.baseshop.order.dto.OrderCreateReqDto;
-import com.baseshop.order.dto.OrderItemCreateReqDto;
 import com.baseshop.product.entity.Product;
 import com.baseshop.product.repository.ProductRepository;
 import com.baseshop.product.type.ProductStatusType;
@@ -133,7 +132,7 @@ class OrderServiceTest {
     }
 
     private OrderCreateReqDto createOrderReq(Long productId, int quantity) {
-        OrderItemCreateReqDto item = new OrderItemCreateReqDto();
+        OrderCreateReqDto.OrderItemCreateReqDto item = new OrderCreateReqDto.OrderItemCreateReqDto();
         item.setProductId(productId);
         item.setQuantity(quantity);
 

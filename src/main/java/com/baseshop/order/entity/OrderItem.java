@@ -31,16 +31,14 @@ public class OrderItem extends BaseEntity {
     @Column(nullable = false)
     private int quantity;
 
-    public static OrderItem createOrderItem(Order savedOrder, Product product, int quantity) {
+    public OrderItem(Order order, Product product, int quantity) {
+        this.order = order;
+        this.product = product;
+        this.orderPrice = product.getPrice();
+        this.quantity = quantity;
+
         // 재고 차감
         product.removeQuantity(quantity);
-
-        OrderItem orderItem = new OrderItem();
-        orderItem.order = savedOrder;
-        orderItem.product = product;
-        orderItem.orderPrice = product.getPrice();
-        orderItem.quantity = quantity;
-        return orderItem;
     }
 
     public long getTotalPrice() {

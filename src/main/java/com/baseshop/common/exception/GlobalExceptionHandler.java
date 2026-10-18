@@ -10,7 +10,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
@@ -19,7 +18,6 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
-import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 @Slf4j
 @RestControllerAdvice
@@ -44,13 +42,13 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * [409 CONFLICT] 락 대기시간 초과 / 데드락 (동시 주문 몰림)
+     * [409 CONFLICT] 락 대기시간 초과 / 데드락
      */
     @ExceptionHandler(PessimisticLockingFailureException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     public ApiResponse<Void> handlePessimisticLockingFailureException(PessimisticLockingFailureException e) {
         log.warn("락 획득 실패: {}", e.getMessage());
-        return ApiResponse.fail("LOCK_CONFLICT", "주문이 몰려 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+        return ApiResponse.fail("LOCK_CONFLICT", "잠시 후 다시 시도해 주세요.");
     }
 
 
@@ -119,8 +117,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public ApiResponse<Void> exception(Exception e) {
-        log.error("Exception {}", e.getMessage());
+        log.error("Exception {}", e.getMessage(), e);
         return ApiResponse.fail("INTERNAL_SERVER_ERROR", "서버 내부 에러가 발생했습니다. 관리자에게 문의하세요.");
     }
+
+
 
 }

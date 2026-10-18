@@ -25,7 +25,7 @@ public class ProductFileService {
     private final ProductFileRepository productFileRepository;
 
     @Transactional
-    public ProductFileResDto createProductFile(Long id, MultipartFile multipartFile) {
+    public ProductFileResDto create(Long id, MultipartFile multipartFile) {
         Product product = productRepository.findById(id).orElseThrow(() -> new EntityNotFoundException("존재하지 않는 상품입니다."));
 
         // 기존 이미지는 DB 삭제 표시

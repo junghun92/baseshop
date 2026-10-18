@@ -3,9 +3,9 @@ package com.baseshop.order.entity;
 import com.baseshop.common.entity.BaseEntity;
 import com.baseshop.member.entity.Member;
 import com.baseshop.order.type.OrderStatusType;
+import com.baseshop.product.entity.Product;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
-import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -30,29 +30,45 @@ public class Order extends BaseEntity {
     @Column(nullable = false)
     private long totalPrice;
 
+    @Column(nullable = false, columnDefinition = "varchar(20)")
     @Enumerated(EnumType.STRING)
     private OrderStatusType orderStatusType;
 
     @OneToMany(mappedBy = "order")
     private List<OrderItem> orderItemList = new ArrayList<>();
 
-    @Builder
-    public Order(Member member, Long totalPrice, OrderStatusType orderStatusType) {
-        this.member = member;
-        this.totalPrice = totalPrice;
-        this.orderStatusType = orderStatusType;
+    // 주문 생성 (항상 주문대기, 금액 0으로 시작)
+    public static Order createOrder(Member member) {
+        Order order = new Order();
+        order.member = member;
+        order.totalPrice = 0L;
+        order.orderStatusType = OrderStatusType.PENDING;
+        return order;
     }
 
-    public void changeTotalPrice(long totalPrice) {
-        this.totalPrice = totalPrice;
+    // 주문상품 추가: 생성 + 양방향 연결 + 총액 누적을 한 번에
+    public OrderItem addOrderItem(Product product, int quantity) {
+        OrderItem orderItem = new OrderItem(this, product, quantity);   // 같은 패키지라 접근 가능
+        orderItemList.add(orderItem);
+        totalPrice += orderItem.getTotalPrice();
+        return orderItem;
     }
 
-    // 주문취소 (상태변경)
+    // 주문완료
+    public void complete() {
+        this.orderStatusType = OrderStatusType.COMPLETED;
+    }
+
+    public void fail(){
+        this.orderStatusType = OrderStatusType.FAILED;
+    }
+
+    // 주문취소
     public void cancel() {
-        if(this.orderStatusType != OrderStatusType.ORDER){
+        if(this.orderStatusType != OrderStatusType.COMPLETED){
             throw new IllegalArgumentException("취소할 수 없는 주문입니다.");
         }
 
-        this.orderStatusType = OrderStatusType.CANCEL;
+        this.orderStatusType = OrderStatusType.CANCELLED;
     }
 }

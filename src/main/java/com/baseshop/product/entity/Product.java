@@ -31,6 +31,7 @@ public class Product extends BaseEntity {
     @Column(nullable = false)
     private int quantity;
 
+    @Column(nullable = false, columnDefinition = "varchar(20)")
     @Enumerated(EnumType.STRING)
     private ProductStatusType productStatusType;
 

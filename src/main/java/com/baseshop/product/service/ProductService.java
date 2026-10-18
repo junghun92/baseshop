@@ -2,6 +2,7 @@ package com.baseshop.product.service;
 
 import com.baseshop.common.dto.PagingResDto;
 import com.baseshop.common.file.FileStore;
+import com.baseshop.order.entity.OrderItem;
 import com.baseshop.product.dto.*;
 import com.baseshop.product.entity.Product;
 import com.baseshop.product.repository.ProductQueryRepository;
@@ -12,6 +13,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -87,5 +92,21 @@ public class ProductService {
         product.changeQuantity(quantityUpdateReqDto.getChangeQuantity());
 
         return product.getId();
+    }
+
+    /**
+     * 주문 생성 시 차감한 재고를 복구한다.
+     * - 호출하는 쪽의 트랜잭션 안에서 실행된다. (상품 락은 커밋 때 해제)
+     * - 주문 생성과 같은 순서(상품ID 오름차순)로 락을 잡아 데드락을 피한다.
+     */
+    public void updateStockRestore(List<OrderItem> orderItemList) {
+        List<OrderItem> sortedOrderItemList = new ArrayList<>(orderItemList);
+        sortedOrderItemList.sort(Comparator.comparing(orderItem -> orderItem.getProduct().getId()));
+
+        for (OrderItem orderItem : sortedOrderItemList) {
+            Product product = productRepository.findByIdForUpdate(orderItem.getProduct().getId())
+                    .orElseThrow(() -> new EntityNotFoundException("존재하지 않는 상품입니다."));
+            product.addQuantity(orderItem.getQuantity());
+        }
     }
 }

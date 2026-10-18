@@ -17,6 +17,6 @@ public class ProductFileController {
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<ProductFileResDto> createProductFile(@PathVariable Long id, @RequestParam("file") MultipartFile multipartFile){
-        return ApiResponse.success(productFileService.createProductFile(id, multipartFile));
+        return ApiResponse.success(productFileService.create(id, multipartFile));
     }
 }

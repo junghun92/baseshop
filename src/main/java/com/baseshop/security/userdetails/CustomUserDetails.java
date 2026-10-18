@@ -26,7 +26,7 @@ public class CustomUserDetails implements UserDetails {
     }
 
     private Set<GrantedAuthority> convertToAuthorities(MemberRoleType memberRoleType) {
-        return Collections.singleton( new SimpleGrantedAuthority(memberRoleType.getValue()));
+        return Collections.singleton( new SimpleGrantedAuthority(memberRoleType.name()));
     }
 
     @Override

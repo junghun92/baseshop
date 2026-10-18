@@ -13,4 +13,6 @@ public interface ProductFileRepository extends JpaRepository<ProductFile, Long> 
 
     // 배치 대상: 삭제 표시 후 기준일이 지난 것
     List<ProductFile> findAllByDelYnAndDelDateBefore(String delYn, LocalDateTime baseDate);
+
+    List<ProductFile> findByProductIdInAndDelYn(List<Long> productIdList, String delYn);
 }

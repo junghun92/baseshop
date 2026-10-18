@@ -3,7 +3,6 @@ package com.baseshop.member.entity;
 import com.baseshop.common.entity.BaseEntity;
 import com.baseshop.member.type.MemberRoleType;
 import jakarta.persistence.*;
-import jakarta.validation.constraints.Email;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -29,6 +28,7 @@ public class Member extends BaseEntity {
     @Column(nullable = false, unique = true)
     private String email;
 
+    @Column(nullable = false, columnDefinition = "varchar(20)")
     @Enumerated(EnumType.STRING)
     private MemberRoleType memberRoleType;
 
