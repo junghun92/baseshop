@@ -18,10 +18,12 @@ import com.baseshop.product.service.ProductService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -38,8 +40,18 @@ public class PaymentService {
      * 포트원 결제 결과로 결제 상태를 변경
      */
     @Transactional
-    public PaymentCompleteResDto complete(String portonePaymentId, PortOnePaymentResDto portOnePayment) {
+    public PaymentCompleteResDto updateSync(String portonePaymentId, PortOnePaymentResDto portOnePayment) {
         Payment payment = getPaymentForUpdate(portonePaymentId);
+
+        // Payment DB READY -> 결제 반영 (완료 / 실패 / 금액불일치)
+        if (payment.getPaymentStatusType() == PaymentStatusType.READY) {
+            return processComplete(payment, portOnePayment);
+        }
+
+        // Payment DB PAID + 포트원 CANCELLED -> 취소 반영 (콘솔 취소, 최소 후 DB 반영 실패)
+        if (payment.getPaymentStatusType() == PaymentStatusType.PAID && portOnePayment.isCancelled()) {
+            updateCancelSync(payment, portOnePayment);
+        }
 
         return processComplete(payment, portOnePayment);
     }
@@ -53,13 +65,6 @@ public class PaymentService {
             throw new AccessDeniedException("본인의 주문만 결제할 수 있습니다.");
         }
         return PaymentCompleteResDto.from(payment.getOrder(), payment);
-    }
-
-    @Transactional(readOnly = true)
-    public boolean isReadyPayment(String portonePaymentId) {
-        return paymentRepository.findByPortonePaymentId(portonePaymentId)
-                .map(payment -> payment.getPaymentStatusType() == PaymentStatusType.READY)
-                .orElse(false);
     }
 
     /**
@@ -147,8 +152,19 @@ public class PaymentService {
     }
 
     /**
+     * 결제 상태 조회 (웹훅 사전 확인용)
+     * - 처리 대상인지(READY, PAID)만 빠르게 확인하는 용도라 락 없이 조회
+     * - 우리 DB에 없는 결제면 null → 웹훅에서 무시 (예외를 던지면 포트원이 재전송을 반복함)
+     */
+    @Transactional(readOnly = true)
+    public PaymentStatusType getPaymentStatus(String portonePaymentId) {
+        return paymentRepository.findByPortonePaymentId(portonePaymentId)
+                .map(Payment::getPaymentStatusType)
+                .orElse(null);
+    }
+
+    /**
      * 결제취소
-     * - 호출하는 쪽에서 결제 행 락을 잡은 트랜잭션 안에서 호출해야 한다.
      * - SUCCEEDED만 DB에 반영한다. FAILED, REQUESTED는 예외로 롤백한다.
      *   REQUESTED의 최종 결과는 웹훅으로 반영한다.
      */
@@ -157,11 +173,52 @@ public class PaymentService {
         PortOneCancelReqDto cancelReqDto = new PortOneCancelReqDto(
                 cancelReasonType.getDescription(), cancelRequesterType);
         PortOneCancelResDto.Cancellation cancellation = portOneClient.cancel(payment.getPortonePaymentId(), cancelReqDto);
-
         payment.cancel(
                 cancelRequesterType,
                 cancellation.getTotalAmount(),
                 cancellation.getReason(),
                 cancellation.getCancelledDate());
+    }
+
+    /** 포트원에서 취소 반영 (취소는 포트원에서 이미 완료된 상태) */
+    private void updateCancelSync(Payment payment, PortOnePaymentResDto portOnePayment) {
+        Order order = payment.getOrder();
+        payment.cancel(
+                CancelRequesterType.ADMIN,
+                payment.getAmount(),
+                CancelReasonType.EXTERNAL_SYNC.getDescription(),
+                portOnePayment.getCancelledDate());
+        order.cancel();
+        productService.updateStockRestore(order.getOrderItemList());
+    }
+
+    /**
+     * 만료 대상 결제 ID 조회
+     * - READY + 생성 후 threshold 지남, 오래된 순으로 최대 100건
+     */
+    @Transactional(readOnly = true)
+    public List<String> getExpiredPaymentIds(LocalDateTime threshold) {
+        return paymentRepository.findExpiredPortonePaymentIds(
+                PaymentStatusType.READY, threshold, PageRequest.of(0, 100));
+    }
+
+    /**
+     * 결제 만료 처리 (결제창만 열고 결제 안 함)
+     * - 결제 행 락 → READY 재확인 (그 사이 /complete, 웹훅이 처리했으면 종료)
+     * - 결제 FAILED, 주문 FAILED, 재고 복구
+     */
+    @Transactional
+    public void updateExpire(String portonePaymentId) {
+        Payment payment = getPaymentForUpdate(portonePaymentId);
+
+        if (payment.getPaymentStatusType() != PaymentStatusType.READY) {
+            return;
+        }
+
+        Order order = payment.getOrder();
+        payment.fail("결제시간 만료 (30분)", LocalDateTime.now()); // 결제실패 (결제시간 만료)
+        order.fail(); // 주문실패
+        productService.updateStockRestore(order.getOrderItemList()); //재고 복구
+        log.info("결제 만료 처리 portonePaymentId={}", portonePaymentId);
     }
 }

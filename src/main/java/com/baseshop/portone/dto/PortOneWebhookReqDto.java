@@ -17,7 +17,7 @@ public class PortOneWebhookReqDto {
     }
 
     public boolean isPaymentEvent(){
-        boolean paymentType = "Transaction.Paid".equals(type) || "Transaction.Failed".equals(type);
+        boolean paymentType = "Transaction.Paid".equals(type) || "Transaction.Cancelled".equals(type) || "Transaction.Failed".equals(type);
         return paymentType && data != null && data.getPaymentId() != null;
     }
 }

@@ -25,6 +25,7 @@ public class PortOnePaymentResDto {
     private OffsetDateTime paidAt;   // 결제 완료 시점
     private OffsetDateTime failedAt; // 결제 실패 시점
     private Failure failure;         // 결제 실패 정보
+    private OffsetDateTime cancelledAt;
 
     public LocalDateTime getPaidDate() {
         return toKst(paidAt);
@@ -32,6 +33,20 @@ public class PortOnePaymentResDto {
 
     public LocalDateTime getFailedDate() {
         return toKst(failedAt);
+    }
+
+    public LocalDateTime getCancelledDate() {
+        return toKst(cancelledAt);
+    }
+
+    public boolean isCancelled() {
+        return status == PortOnePaymentStatusType.CANCELLED;
+    }
+    public boolean isPaid() {
+        return status == PortOnePaymentStatusType.PAID;
+    }
+    public boolean isFailed() {
+        return status == PortOnePaymentStatusType.FAILED;
     }
 
     private static LocalDateTime toKst(OffsetDateTime dateTime) {

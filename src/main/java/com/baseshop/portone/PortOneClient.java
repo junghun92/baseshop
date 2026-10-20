@@ -56,13 +56,15 @@ public class PortOneClient {
 
         // 취소 처리중 (비동기 환불, 최종 결과는 웹훅으로 반영)
         if(cancellation.isRequested()){
-            log.warn("포트원 결제취소 처리중 portonePaymentId={}", portonePaymentId);
+            log.warn("포트원 결제취소 처리중 portonePaymentId={}, status={}, reason={}",
+                    portonePaymentId, cancellation.getStatus(), cancellation.getReason());
             throw new IllegalArgumentException("취소 요청이 접수되었습니다. 환불 완료까지 시간이 걸릴 수 있습니다.");
         }
 
         // 완료가 아니면 전부 실패
         if(!cancellation.isSucceeded()){
-            log.warn("결제취소 실패 portonePaymentId={}", portonePaymentId);
+            log.warn("결제취소 실패 portonePaymentId={}, status={}, reason={}",
+                    portonePaymentId, cancellation.getStatus(), cancellation.getReason());
             throw new IllegalArgumentException("결제 취소에 실패했습니다. 잠시 후 다시 시도해주세요. 계속 실패하면 고객센터로 문의해주세요.");
         }
 

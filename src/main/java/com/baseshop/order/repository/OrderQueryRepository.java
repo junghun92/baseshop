@@ -1,9 +1,8 @@
 package com.baseshop.order.repository;
 
-import com.baseshop.member.entity.Member;
 import com.baseshop.order.dto.OrderListReqDto;
 import com.baseshop.order.entity.Order;
-import com.baseshop.order.entity.QOrder;
+import com.baseshop.order.type.OrderStatusType;
 import com.querydsl.jpa.impl.JPAQuery;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
@@ -28,7 +27,10 @@ public class OrderQueryRepository {
         List<Order> content = queryFactory
                 .select(order)
                 .from(order)
-                .where(order.member.id.eq(memberId))
+                .where(
+                        order.member.id.eq(memberId),
+                        order.orderStatusType.in(OrderStatusType.VISIBLE_STATUSES)
+                )
                 .offset(pageRequest.getOffset())
                 .limit(pageRequest.getPageSize())
                 .orderBy(order.id.desc())
@@ -37,7 +39,10 @@ public class OrderQueryRepository {
         JPAQuery<Long> count = queryFactory
                 .select(order.count())
                 .from(order)
-                .where(order.member.id.eq(memberId));
+                .where(
+                        order.member.id.eq(memberId),
+                        order.orderStatusType.in(OrderStatusType.VISIBLE_STATUSES)
+                );
 
         return PageableExecutionUtils.getPage(content, pageRequest, count::fetchOne);
     }

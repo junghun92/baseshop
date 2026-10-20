@@ -30,11 +30,11 @@ public class PortOneCancelResDto {
         private OffsetDateTime cancelledAt;  // 취소 완료 시점 (SUCCEEDED일 때)
 
         public boolean isSucceeded() {
-            return "SUCCEEDED".equals(status);
+            return status == CancelStatusType.SUCCEEDED;
         }
 
         public boolean isRequested() {
-            return "REQUESTED".equals(status);
+            return status == CancelStatusType.REQUESTED;
         }
 
         public LocalDateTime getCancelledDate() {
