@@ -23,7 +23,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Optional;
 
 @Service
 @Slf4j
@@ -46,19 +45,21 @@ public class PaymentService {
     }
 
     @Transactional(readOnly = true)
-    public Optional<PaymentCompleteResDto> getProcessedPaymentResult(Long memberId, String portonePaymentId) {
+    public PaymentCompleteResDto getPaymentResult(Long memberId, String portonePaymentId) {
         Payment payment = paymentRepository.findByPortonePaymentId(portonePaymentId)
                 .orElseThrow(() -> new EntityNotFoundException("결제 정보가 없습니다."));
 
         if (!payment.getOrder().getMember().getId().equals(memberId)) {
             throw new AccessDeniedException("본인의 주문만 결제할 수 있습니다.");
         }
+        return PaymentCompleteResDto.from(payment.getOrder(), payment);
+    }
 
-        if (payment.getPaymentStatusType() == PaymentStatusType.READY) {
-            return Optional.empty();
-        }
-
-        return Optional.of(PaymentCompleteResDto.from(payment.getOrder(), payment));
+    @Transactional(readOnly = true)
+    public boolean isReadyPayment(String portonePaymentId) {
+        return paymentRepository.findByPortonePaymentId(portonePaymentId)
+                .map(payment -> payment.getPaymentStatusType() == PaymentStatusType.READY)
+                .orElse(false);
     }
 
     /**
@@ -147,19 +148,20 @@ public class PaymentService {
 
     /**
      * 결제취소
+     * - 호출하는 쪽에서 결제 행 락을 잡은 트랜잭션 안에서 호출해야 한다.
+     * - SUCCEEDED만 DB에 반영한다. FAILED, REQUESTED는 예외로 롤백한다.
+     *   REQUESTED의 최종 결과는 웹훅으로 반영한다.
      */
-    public PortOneCancelResDto cancel(Payment payment, CancelReasonType cancelReasonType, CancelRequesterType cancelRequesterType) {
+    public void cancel(Payment payment, CancelReasonType cancelReasonType, CancelRequesterType cancelRequesterType) {
         log.info("결제취소 요청 portonePaymentId={}, 결제금액={}",payment.getPortonePaymentId(), payment.getAmount());
         PortOneCancelReqDto cancelReqDto = new PortOneCancelReqDto(
                 cancelReasonType.getDescription(), cancelRequesterType);
-        PortOneCancelResDto cancelResDto = portOneClient.cancel(payment.getPortonePaymentId(), cancelReqDto);
+        PortOneCancelResDto.Cancellation cancellation = portOneClient.cancel(payment.getPortonePaymentId(), cancelReqDto);
 
         payment.cancel(
                 cancelRequesterType,
-                cancelResDto.getTotalAmount(),
-                cancelResDto.getReason(),
-                cancelResDto.getCancelledDate());
-
-        return cancelResDto;
+                cancellation.getTotalAmount(),
+                cancellation.getReason(),
+                cancellation.getCancelledDate());
     }
 }

@@ -4,11 +4,13 @@ import com.baseshop.portone.dto.PortOneCancelReqDto;
 import com.baseshop.portone.dto.PortOneCancelResDto;
 import com.baseshop.portone.dto.PortOnePaymentResDto;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class PortOneClient {
 
     private final RestClient portOneRestClient;
@@ -28,19 +30,43 @@ public class PortOneClient {
                 .get()
                 .uri("/payments/{paymentId}", portonePaymentId)
                 .retrieve()
+                .onStatus(status -> status.value() == 404, (request, response) -> {
+                    throw new IllegalArgumentException("결제가 완료되지 않았습니다.");
+                })
                 .body(PortOnePaymentResDto.class);
     }
 
     /**
      * 결제취소
      */
-    public PortOneCancelResDto cancel(String portonePaymentId, PortOneCancelReqDto portOneCancelReqDto) {
-        return portOneRestClient
+    public PortOneCancelResDto.Cancellation cancel(String portonePaymentId, PortOneCancelReqDto portOneCancelReqDto) {
+        PortOneCancelResDto portOneCancelResDto = portOneRestClient
                 .post()
                 .uri("/payments/{paymentId}/cancel", portonePaymentId)
                 .body(portOneCancelReqDto) //요청 바디
                 .retrieve()
                 .body(PortOneCancelResDto.class);
+
+        if(portOneCancelResDto == null || portOneCancelResDto.getCancellation() == null){
+            log.warn("결제취소 응답 없음 portonePaymentId={}", portonePaymentId);
+            throw new IllegalArgumentException("결제 취소에 실패했습니다. 잠시 후 다시 시도해주세요. 계속 실패하면 고객센터로 문의해주세요.");
+        }
+
+        PortOneCancelResDto.Cancellation cancellation = portOneCancelResDto.getCancellation();
+
+        // 취소 처리중 (비동기 환불, 최종 결과는 웹훅으로 반영)
+        if(cancellation.isRequested()){
+            log.warn("포트원 결제취소 처리중 portonePaymentId={}", portonePaymentId);
+            throw new IllegalArgumentException("취소 요청이 접수되었습니다. 환불 완료까지 시간이 걸릴 수 있습니다.");
+        }
+
+        // 완료가 아니면 전부 실패
+        if(!cancellation.isSucceeded()){
+            log.warn("결제취소 실패 portonePaymentId={}", portonePaymentId);
+            throw new IllegalArgumentException("결제 취소에 실패했습니다. 잠시 후 다시 시도해주세요. 계속 실패하면 고객센터로 문의해주세요.");
+        }
+
+        return cancellation;
     }
 }
 

@@ -7,8 +7,6 @@ import com.baseshop.portone.dto.PortOnePaymentResDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-import java.util.Optional;
-
 @Component
 @RequiredArgsConstructor
 public class PaymentFacade {
@@ -20,14 +18,26 @@ public class PaymentFacade {
         String portonePaymentId = paymentCompleteReqDto.getPortonePaymentId();
 
         // 처리된 결제는 그대로 반환
-        Optional<PaymentCompleteResDto> processed = paymentService.getProcessedPaymentResult(memberId, portonePaymentId);
-        if (processed.isPresent()) {
-            return processed.get();
+        PaymentCompleteResDto paymentResult = paymentService.getPaymentResult(memberId, portonePaymentId);
+        if (!paymentResult.isReady()) {
+            return paymentResult;
         }
 
         // 포트원 API 조회는 트랜잭션 밖에서 진행. DB 커넥션 점유 X
         PortOnePaymentResDto portOnePayment = portOneClient.getPayment(portonePaymentId);
 
         return paymentService.complete(portonePaymentId, portOnePayment);
+    }
+
+    public void updateWebhook(String paymentId) {
+        // 이미 처리 된 요청
+        if (!paymentService.isReadyPayment(paymentId)) {
+            return;
+        }
+
+        // 포트원 API 조회는 트랜잭션 밖에서 진행. DB 커넥션 점유 X
+        PortOnePaymentResDto portOnePayment = portOneClient.getPayment(paymentId);
+
+        paymentService.complete(paymentId, portOnePayment);
     }
 }

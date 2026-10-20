@@ -58,12 +58,15 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/board/*").permitAll() // 게시글 조회
                         .requestMatchers(HttpMethod.GET, "/api/v1/board").permitAll() // 전체 게시글 조회
 
-                        .requestMatchers(HttpMethod.GET, "/api/v1/product").permitAll() // 상품 리스트
-                        .requestMatchers(HttpMethod.GET, "/api/v1/product/*").permitAll() // 상품상세
                         .requestMatchers(HttpMethod.POST, "/api/v1/product").hasAuthority("ADMIN") // 상품등록
                         .requestMatchers(HttpMethod.PUT, "/api/v1/product/*").hasAuthority("ADMIN") // 상품수정
-                        .requestMatchers(HttpMethod.PUT, "/api/v1/product/*/quantity").hasAuthority("ADMIN") // 상품 재고수정
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/product/*").hasAuthority("ADMIN") // 상품 판매중지
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/product/*/quantity").hasAuthority("ADMIN") // 상품 재고수정
+                        .requestMatchers(HttpMethod.POST, "/api/v1/product/*/file").hasAnyAuthority("ADMIN") // 이미지 업로드
+                        .requestMatchers(HttpMethod.GET, "/api/v1/product").permitAll() // 상품 리스트
+                        .requestMatchers(HttpMethod.GET, "/api/v1/product/*").permitAll() // 상품상세
+                        .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll() // 이미지 URL
+
 
                         .requestMatchers(HttpMethod.GET, "/api/v1/cart").hasAnyAuthority("USER", "ADMIN") // 내 장바구니 리스트
                         .requestMatchers(HttpMethod.POST, "/api/v1/cart").hasAnyAuthority("USER", "ADMIN") // 장바구니 등록
@@ -74,10 +77,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/order").hasAnyAuthority("USER", "ADMIN") // 내 주문 리스트
                         .requestMatchers(HttpMethod.PUT, "/api/v1/order/*/cancel").hasAnyAuthority("USER", "ADMIN") // 주문 취소(상태값 변경)
 
+                        .requestMatchers(HttpMethod.POST, "/api/v1/payment/complete").hasAnyAuthority("USER", "ADMIN") // 결제완료
+                        .requestMatchers(HttpMethod.POST, "/api/v1/payment/webhook").permitAll() // 포트원 웹훅 (서명으로 검증)
+
                         .requestMatchers(HttpMethod.POST, "/api/v1/member").permitAll()
 
-                        .requestMatchers(HttpMethod.POST, "/api/v1/product/*/file").hasAnyAuthority("ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll() // 이미지
 
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll()

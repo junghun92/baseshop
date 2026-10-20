@@ -82,6 +82,7 @@ public class OrderService {
                 .orderId(order.getId())
                 .portonePaymentId(payment.getPortonePaymentId())
                 .totalAmount(payment.getAmount())
+                .orderName(order.getOrderName())
                 .build();
     }
 

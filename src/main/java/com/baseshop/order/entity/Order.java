@@ -28,6 +28,9 @@ public class Order extends BaseEntity {
     private Member member;
 
     @Column(nullable = false)
+    private String orderName;
+
+    @Column(nullable = false)
     private long totalPrice;
 
     @Column(nullable = false, columnDefinition = "varchar(20)")
@@ -42,6 +45,7 @@ public class Order extends BaseEntity {
         Order order = new Order();
         order.member = member;
         order.totalPrice = 0L;
+        order.orderName = "";
         order.orderStatusType = OrderStatusType.PENDING;
         return order;
     }
@@ -51,7 +55,18 @@ public class Order extends BaseEntity {
         OrderItem orderItem = new OrderItem(this, product, quantity);   // 같은 패키지라 접근 가능
         orderItemList.add(orderItem);
         totalPrice += orderItem.getTotalPrice();
+        updateOrderName();
         return orderItem;
+    }
+
+    // 상품 1건: "상품명", 2건 이상: "첫 상품명 외 N건"
+    private void updateOrderName() {
+        String firstProductName = orderItemList.get(0).getProduct().getName();
+        int otherCount = orderItemList.size() - 1;
+
+        this.orderName = otherCount == 0
+                ? firstProductName
+                : firstProductName + " 외 " + otherCount + "건";
     }
 
     // 주문완료

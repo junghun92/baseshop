@@ -13,13 +13,17 @@ public class OrderCreateResDto {
     @Schema(description = "포트원 결제 ID (requestPayment의 paymentId로 사용)")
     private String portonePaymentId;
 
+    @Schema(description = "주문명")
+    private String orderName;
+
     @Schema(description = "총 주문금액")
     private long totalAmount;
 
     @Builder
-    public OrderCreateResDto(Long orderId, String portonePaymentId, long totalAmount) {
+    public OrderCreateResDto(Long orderId, String portonePaymentId, String orderName, long totalAmount) {
         this.orderId = orderId;
         this.portonePaymentId = portonePaymentId;
+        this.orderName = orderName;
         this.totalAmount = totalAmount;
     }
 }

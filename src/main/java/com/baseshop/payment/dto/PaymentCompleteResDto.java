@@ -56,4 +56,8 @@ public class PaymentCompleteResDto {
             default -> "결제 처리 중입니다.";
         };
     }
+
+    public boolean isReady() {
+        return paymentStatusType == PaymentStatusType.READY;
+    }
 }
