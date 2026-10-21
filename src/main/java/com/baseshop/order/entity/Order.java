@@ -40,8 +40,7 @@ public class Order extends BaseEntity {
     @OneToMany(mappedBy = "order")
     private List<OrderItem> orderItemList = new ArrayList<>();
 
-    // 주문 생성 (항상 주문대기, 금액 0으로 시작)
-    public static Order createOrder(Member member) {
+    public static Order createPending(Member member) {
         Order order = new Order();
         order.member = member;
         order.totalPrice = 0L;

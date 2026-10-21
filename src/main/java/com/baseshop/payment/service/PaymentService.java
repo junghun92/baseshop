@@ -21,6 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -67,11 +68,9 @@ public class PaymentService {
         return PaymentCompleteResDto.from(payment.getOrder(), payment);
     }
 
-    /**
-     * 결제 조회 (비관적 락)
-     * - 프론트 요청과 웹훅이 동시에 와도 한 건씩 처리하도록 함.
-     */
-    private Payment getPaymentForUpdate(String portonePaymentId) {
+    /** 결제 조회 */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Payment getPaymentForUpdate(String portonePaymentId) {
         return paymentRepository.findByPortonePaymentIdForUpdate(portonePaymentId)
                 .orElseThrow(() -> new EntityNotFoundException("결제정보가 없습니다."));
     }
@@ -220,5 +219,31 @@ public class PaymentService {
         order.fail(); // 주문실패
         productService.updateStockRestore(order.getOrderItemList()); //재고 복구
         log.info("결제 만료 처리 portonePaymentId={}", portonePaymentId);
+    }
+
+    /** 결제 준비(READY) 생성 */
+    @Transactional
+    public Payment createReady(Order order) {
+        return paymentRepository.save(Payment.createReady(order));
+    }
+
+    /**
+     * 취소 가능한 결제 확인 (락 없이 사전확인)
+     * - 본인 주문 + 결제완료(PAID)만 취소 가능
+     */
+    @Transactional(readOnly = true)
+    public String getCancelablePaymentId(Long memberId, Long orderId) {
+        Payment payment = paymentRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new EntityNotFoundException("해당 주문내역이 없습니다."));
+
+        if (!payment.getOrder().getMember().getId().equals(memberId)) {
+            throw new AccessDeniedException("본인의 주문만 취소할 수 있습니다.");
+        }
+
+        if (payment.getPaymentStatusType() != PaymentStatusType.PAID) {
+            throw new IllegalArgumentException("취소할 수 없는 주문입니다.");
+        }
+
+        return payment.getPortonePaymentId();
     }
 }

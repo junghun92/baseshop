@@ -17,6 +17,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 
 @Service
@@ -74,5 +76,13 @@ public class ProductFileService {
         log.info("상품 이미지 정리 완료: {}건", targets.size());
     }
 
+    /** 상품 이미지 URL 일괄 조회 (사용 중인 이미지만) */
+    @Transactional(readOnly = true)
+    public Map<Long, String> getProductImageUrlMap(List<Long> productIdList) {
+        return productFileRepository.findByProductIdInAndDelYn(productIdList, "N").stream()
+                .collect(Collectors.toMap(
+                        p -> p.getProduct().getId(),
+                        p -> fileStore.getUrl(p.getUploadFile().getStoreFilePath())));
+    }
 
 }

@@ -1,10 +1,10 @@
 package com.baseshop.order.service;
 
 import com.baseshop.common.dto.PagingResDto;
-import com.baseshop.common.file.FileStore;
 import com.baseshop.member.entity.Member;
-import com.baseshop.member.repository.MemberRepository;
-import com.baseshop.order.dto.*;
+import com.baseshop.order.dto.OrderCreateReqDto;
+import com.baseshop.order.dto.OrderListReqDto;
+import com.baseshop.order.dto.OrderListResDto;
 import com.baseshop.order.entity.Order;
 import com.baseshop.order.entity.OrderItem;
 import com.baseshop.order.repository.OrderItemRepository;
@@ -17,9 +17,6 @@ import com.baseshop.payment.type.PaymentStatusType;
 import com.baseshop.portone.type.CancelReasonType;
 import com.baseshop.portone.type.CancelRequesterType;
 import com.baseshop.product.entity.Product;
-import com.baseshop.product.entity.ProductFile;
-import com.baseshop.product.repository.ProductFileRepository;
-import com.baseshop.product.repository.ProductRepository;
 import com.baseshop.product.service.ProductService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -29,68 +26,46 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class OrderService {
 
-    private final MemberRepository memberRepository;
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
-    private final ProductRepository productRepository;
-    private final ProductFileRepository productFileRepository;
     private final OrderQueryRepository orderQueryRepository;
     private final PaymentRepository paymentRepository;
     private final PaymentService paymentService;
     private final ProductService productService;
-    private final FileStore fileStore;
 
+    /** 주문생성 */
     @Transactional
-    public OrderCreateResDto create(Long memberId, OrderCreateReqDto orderCreateReqDto) {
-        List<OrderCreateReqDto.OrderItemCreateReqDto> items = orderCreateReqDto.getItems();
-
-        // 상품ID 순서로 정렬 (데드락 방지)
-        items.sort(Comparator.comparing(OrderCreateReqDto.OrderItemCreateReqDto::getProductId));
-
-        // 회원조회
-        Member member = memberRepository.findById(memberId).orElseThrow(() -> new EntityNotFoundException("존재하지 않는 회원입니다."));
-
+    public Order create(Member member,
+                        List<OrderCreateReqDto.OrderItemCreateReqDto> itemList,
+                        Map<Long, Product> productMap) {
         // 주문 생성 (주문대기)
-        Order order = Order.createOrder(member);
+        Order order = Order.createPending(member);
 
+        // 주문상품 생성, 상품 재고차감
         List<OrderItem> orderItemList = new ArrayList<>();
-
-        for (OrderCreateReqDto.OrderItemCreateReqDto item : items) {
-            Product product = productRepository.findByIdForUpdate(item.getProductId()).orElseThrow(() -> new EntityNotFoundException("존재하지 않는 상품입니다."));
-
-            // 주문상품 생성, 상품 재고차감 (변경 감지로 UPDATE)
+        for (OrderCreateReqDto.OrderItemCreateReqDto item : itemList) {
+            Product product = productMap.get(item.getProductId());
             OrderItem orderItem = order.addOrderItem(product, item.getQuantity());
             orderItemList.add(orderItem);
         }
 
-        orderRepository.save(order); // 주문저장
-        orderItemRepository.saveAll(orderItemList); // 주문상품 저장
+        orderRepository.save(order);
+        orderItemRepository.saveAll(orderItemList);
 
-        // 결제 준비상태 저장
-        Payment payment = paymentRepository.save(Payment.createReady(order));
-
-        return OrderCreateResDto.builder()
-                .orderId(order.getId())
-                .portonePaymentId(payment.getPortonePaymentId())
-                .totalAmount(payment.getAmount())
-                .orderName(order.getOrderName())
-                .build();
+        return order;
     }
 
+    /** 주문 리스트 */
     @Transactional(readOnly = true)
     public PagingResDto<OrderListResDto> getOrderList(Long memberId, OrderListReqDto orderListReqDto) {
-        // 주문 리스트
         Page<Order> orderList = orderQueryRepository.findOrderList(memberId, orderListReqDto);
-
         return new PagingResDto<>(orderList.map(OrderListResDto::new));
     }
 
@@ -120,46 +95,4 @@ public class OrderService {
         return order.getId();
     }
 
-    @Transactional(readOnly = true)
-    public OrderSheetResDto getOrderSheet(OrderSheetReqDto orderSheetReqDto) {
-        List<OrderSheetReqDto.OrderSheetItemReqDto> items = orderSheetReqDto.getItems();
-
-        // 상품번호 추출
-        List<Long> productIdList = items.stream()
-                .map(OrderSheetReqDto.OrderSheetItemReqDto::getProductId)
-                .toList();
-        
-        // 전체 상품조회 -> Map<상품ID, 상품>
-        List<Product> productList = productRepository.findAllById(productIdList);
-        Map<Long, Product> productMap = productList.stream()
-                .collect(Collectors.toMap(Product::getId, product -> product));
-        
-        // 전체 상품 이미지 조회 -> Map<상품ID, 상품파일>
-        List<ProductFile> productFileList = productFileRepository.findByProductIdInAndDelYn(productIdList, "N");
-        Map<Long, ProductFile> productFileMap = productFileList.stream()
-                .collect(Collectors.toMap(p -> p.getProduct().getId(), productFile -> productFile));
-
-        // 주문서 정보 조회
-        OrderSheetResDto orderSheetResDto = new OrderSheetResDto();
-
-        for (OrderSheetReqDto.OrderSheetItemReqDto item : items) {
-            Product product = productMap.get(item.getProductId());
-            if(product == null){
-                throw new EntityNotFoundException("상품 정보가 없습니다.");
-            }
-
-            ProductFile productFile = productFileMap.get(item.getProductId());
-            String imageUrl = productFile != null ? fileStore.getUrl(productFile.getUploadFile().getStoreFilePath()) : null;
-
-            orderSheetResDto.addItem(OrderSheetResDto.OrderSheetItemResDto.builder()
-                    .productId(product.getId())
-                    .name(product.getName())
-                    .imageUrl(imageUrl)
-                    .price(product.getPrice())
-                    .quantity(item.getQuantity())
-                    .build());
-        }
-
-        return orderSheetResDto;
-    }
 }

@@ -21,14 +21,13 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     Optional<Payment> findByPortonePaymentId(String portonePaymentId);
 
-    /** 주문 ID로 결제를 조회하며 락을 건다. (주문/결제 상태 변경은 결제 행 락으로 직렬화) */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Payment p where p.order.id = :orderId")
     Optional<Payment> findByOrderIdForUpdate(Long orderId);
 
-    /**
-     * 만료 대상 결제 ID (상태 + 생성일 기준, 오래된 순)
-     */
+    Optional<Payment> findByOrderId(Long orderId);
+
+    /** 만료 대상 결제 ID (상태 + 생성일 기준, 오래된 순) */
     @Query("select p.portonePaymentId from Payment p " +
             "where p.paymentStatusType = :status and p.regDate < :threshold " +
             "order by p.id")

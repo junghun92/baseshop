@@ -3,6 +3,7 @@ package com.baseshop.order.controller;
 import com.baseshop.common.dto.PagingResDto;
 import com.baseshop.common.handler.ApiResponse;
 import com.baseshop.order.dto.*;
+import com.baseshop.order.facade.OrderFacade;
 import com.baseshop.order.service.OrderService;
 import com.baseshop.security.userdetails.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 public class OrderController {
 
     private final OrderService orderService;
+    private final OrderFacade orderFacade;
 
     @PostMapping
     @Operation(summary = "주문 등록")
@@ -27,13 +29,13 @@ public class OrderController {
             @Valid @RequestBody OrderCreateReqDto orderCreateReqDto) {
         Long memberId = userDetails.getMemberId();
 
-        return ApiResponse.success(orderService.create(memberId, orderCreateReqDto));
+        return ApiResponse.success(orderFacade.create(memberId, orderCreateReqDto));
     }
 
     @PostMapping("/sheet")
     @Operation(summary = "주문서")
     public ApiResponse<OrderSheetResDto> getOrderSheet(@Valid @RequestBody OrderSheetReqDto orderSheetReqDto) {
-        return ApiResponse.success(orderService.getOrderSheet(orderSheetReqDto));
+        return ApiResponse.success(orderFacade.getOrderSheet(orderSheetReqDto));
     }
 
     @GetMapping
@@ -53,7 +55,7 @@ public class OrderController {
             @PathVariable Long id){
         Long memberId = userDetails.getMemberId();
 
-        return ApiResponse.success(orderService.cancel(memberId, id));
+        return ApiResponse.success(orderFacade.cancel(memberId, id));
     }
 
 }

@@ -5,6 +5,7 @@ import com.baseshop.member.dto.MemberDetailResDto;
 import com.baseshop.member.entity.Member;
 import com.baseshop.member.repository.MemberRepository;
 import com.baseshop.member.type.MemberRoleType;
+import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.validator.routines.EmailValidator;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -69,5 +70,11 @@ public class MemberService {
                 .build();
     }
 
+    /** 회원조회 */
+    @Transactional(readOnly = true)
+    public Member getMember(Long id) {
+        return memberRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("존재하지 않는 회원입니다."));
+    }
 
 }

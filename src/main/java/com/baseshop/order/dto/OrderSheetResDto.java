@@ -1,5 +1,6 @@
 package com.baseshop.order.dto;
 
+import com.baseshop.product.entity.Product;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Data;
@@ -7,6 +8,7 @@ import lombok.NoArgsConstructor;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Data
 @NoArgsConstructor
@@ -21,6 +23,26 @@ public class OrderSheetResDto {
     public void addItem(OrderSheetItemResDto item) {
         this.orderItemSheetList.add(item);
         this.totalAmount += item.getItemTotalAmount();
+    }
+
+    /** 주문서 생성 */
+    public static OrderSheetResDto of(List<OrderSheetReqDto.OrderSheetItemReqDto> itemList,
+                                      Map<Long, Product> productMap,
+                                      Map<Long, String> imageUrlMap) {
+        OrderSheetResDto orderSheetResDto = new OrderSheetResDto();
+
+        for (OrderSheetReqDto.OrderSheetItemReqDto item : itemList) {
+            Product product = productMap.get(item.getProductId());
+
+            orderSheetResDto.addItem(OrderSheetItemResDto.builder()
+                    .productId(product.getId())
+                    .name(product.getName())
+                    .imageUrl(imageUrlMap.get(product.getId()))
+                    .price(product.getPrice())
+                    .quantity(item.getQuantity())
+                    .build());
+        }
+        return orderSheetResDto;
     }
 
     @Data
@@ -54,5 +76,6 @@ public class OrderSheetResDto {
             this.itemTotalAmount = price * quantity;
         }
     }
+
 
 }

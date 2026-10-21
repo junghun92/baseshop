@@ -12,7 +12,7 @@ public class OrderCreateReqDto {
 
     @Schema(description = "주문할 상품 목록")
     @NotEmpty(message = "주문할 상품이 없습니다.")
-    private List<OrderItemCreateReqDto> items = new ArrayList<>();
+    private List<OrderItemCreateReqDto> itemList = new ArrayList<>();
 
     @Data
     public static class OrderItemCreateReqDto {

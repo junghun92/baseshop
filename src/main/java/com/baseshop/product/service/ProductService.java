@@ -12,11 +12,15 @@ import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -108,5 +112,19 @@ public class ProductService {
                     .orElseThrow(() -> new EntityNotFoundException("존재하지 않는 상품입니다."));
             product.addQuantity(orderItem.getQuantity());
         }
+    }
+
+    /** 상품 비관적락 일괄 조회 (재고 변경용) */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Map<Long, Product> getProductMapForUpdate(List<Long> productIdList){
+        return productRepository.findAllByIdInForUpdate(productIdList).stream()
+                .collect(Collectors.toMap(Product::getId, Function.identity()));
+    }
+
+    /** 상품 일괄 조회 */
+    @Transactional(readOnly = true)
+    public Map<Long, Product> getProductMap(List<Long> productIdList) {
+        return productRepository.findAllById(productIdList).stream()
+                .collect(Collectors.toMap(Product::getId, Function.identity()));
     }
 }
