@@ -16,4 +16,19 @@ public enum PaymentStatusType {
     VIRTUAL_ACCOUNT_ISSUED("가상계좌 발급완료");
 
     private final String description;
+
+    /**
+     * 결제 상태 전이 규칙
+     * - READY → PAID (결제완료), FAILED (결제실패, 만료), CANCELLED (금액 불일치 환불)
+     * - PAID  → CANCELLED (고객 주문취소, 콘솔 취소 동기화)
+     * - FAILED, CANCELLED -> 끝
+     */
+    public boolean canTransitTo(PaymentStatusType target) {
+        return switch (this) {
+            case READY -> target == PAID || target == FAILED || target == CANCELLED;
+            case PAID -> target == CANCELLED;
+            case FAILED, CANCELLED -> false;
+            case PARTIAL_CANCELLED, PAY_PENDING, VIRTUAL_ACCOUNT_ISSUED -> false; // 현재 사용안함
+        };
+    }
 }

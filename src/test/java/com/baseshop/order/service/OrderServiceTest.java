@@ -4,6 +4,8 @@ import com.baseshop.member.entity.Member;
 import com.baseshop.member.repository.MemberRepository;
 import com.baseshop.member.type.MemberRoleType;
 import com.baseshop.order.dto.OrderCreateReqDto;
+import com.baseshop.order.entity.Order;
+import com.baseshop.order.facade.OrderFacade;
 import com.baseshop.product.entity.Product;
 import com.baseshop.product.repository.ProductRepository;
 import com.baseshop.product.type.ProductStatusType;
@@ -14,6 +16,7 @@ import org.springframework.test.context.ActiveProfiles;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -28,12 +31,12 @@ class OrderServiceTest {
     @Autowired
     OrderService orderService;
     @Autowired
+    OrderFacade orderFacade;
+    @Autowired
     ProductRepository productRepository;
     @Autowired
     MemberRepository memberRepository;
 
-    // 테스트 클래스에 @Transactional 붙이면 안 됨
-    // (스레드마다 별도 트랜잭션이어야 하고, 롤백되면 결과 확인 불가)
     @Test
     void 동시주문100건_재고100개_재고0() throws InterruptedException {
         //given
@@ -62,7 +65,7 @@ class OrderServiceTest {
         for (int i = 0; i < threadCount; i++) {
             executor.submit(() -> {
                 try {
-                    orderService.create(member.getId(), createOrderReq(product.getId(), 1));
+                    orderFacade.create(member.getId(), createOrderReq(product.getId(), 1));
                     successCount.incrementAndGet();
                 } catch (Exception e) {
                     failCount.incrementAndGet();
@@ -110,7 +113,7 @@ class OrderServiceTest {
         for (int i = 0; i < threadCount; i++) {
             executor.submit(() -> {
                 try {
-                    orderService.create(member.getId(), createOrderReq(product.getId(), 1));
+                    orderFacade.create(member.getId(), createOrderReq(product.getId(), 1));
                     successCount.incrementAndGet();
                 } catch (Exception e) {
                     failCount.incrementAndGet();
@@ -137,7 +140,7 @@ class OrderServiceTest {
         item.setQuantity(quantity);
 
         OrderCreateReqDto req = new OrderCreateReqDto();
-        req.setItems(new ArrayList<>(List.of(item)));
+        req.setItemList(new ArrayList<>(List.of(item)));
         return req;
     }
 

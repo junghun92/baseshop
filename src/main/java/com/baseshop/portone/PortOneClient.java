@@ -3,6 +3,7 @@ package com.baseshop.portone;
 import com.baseshop.portone.dto.PortOneCancelReqDto;
 import com.baseshop.portone.dto.PortOneCancelResDto;
 import com.baseshop.portone.dto.PortOnePaymentResDto;
+import com.baseshop.portone.exception.PortOnePaymentNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -31,7 +32,7 @@ public class PortOneClient {
                 .uri("/payments/{paymentId}", portonePaymentId)
                 .retrieve()
                 .onStatus(status -> status.value() == 404, (request, response) -> {
-                    throw new IllegalArgumentException("결제가 완료되지 않았습니다.");
+                    throw new PortOnePaymentNotFoundException("결제 내역이 존재하지 않습니다.");
                 })
                 .body(PortOnePaymentResDto.class);
     }

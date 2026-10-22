@@ -1,6 +1,6 @@
 package com.baseshop.scheduler;
 
-import com.baseshop.payment.service.PaymentFacade;
+import com.baseshop.payment.facade.PaymentFacade;
 import com.baseshop.product.service.ProductFileService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,9 +26,9 @@ public class SchedulerController {
     }
 
     /**
-     * 결제 대기(READY) 만료 정리 (이전 실행 끝나고 10분 뒤)
+     * 결제 대기(READY) 10분이 지난 데이터 처리 (이전 실행이 끝난 시점부터 10분 뒤)
      */
-    @Scheduled(fixedDelay = 10 * 60 * 1000)
+    @Scheduled(fixedDelay = 5 * 60 * 1000)
     public void updateExpiredPayments() {
         paymentFacade.updateExpiredPayments();
     }

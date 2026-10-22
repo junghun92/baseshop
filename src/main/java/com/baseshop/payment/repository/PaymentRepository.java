@@ -19,7 +19,8 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     @Query("select p from Payment p where p.portonePaymentId = :portonePaymentId")
     Optional<Payment> findByPortonePaymentIdForUpdate(String portonePaymentId);
 
-    Optional<Payment> findByPortonePaymentId(String portonePaymentId);
+    @Query("select p from Payment p join fetch p.order where p.portonePaymentId = :portonePaymentId")
+    Optional<Payment> findWithOrderByPortonePaymentId(String portonePaymentId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Payment p where p.order.id = :orderId")
@@ -31,7 +32,7 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     @Query("select p.portonePaymentId from Payment p " +
             "where p.paymentStatusType = :status and p.regDate < :threshold " +
             "order by p.id")
-    List<String> findExpiredPortonePaymentIds(@Param("status") PaymentStatusType status,
+    List<String> findExpiredPortonePaymentIdList(@Param("status") PaymentStatusType status,
                                               @Param("threshold") LocalDateTime threshold,
                                               Pageable pageable);
 }

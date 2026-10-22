@@ -11,6 +11,7 @@ import com.baseshop.product.repository.ProductRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -26,7 +27,8 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ProductFileService {
 
-    private static final int RETENTION_DAYS = 7; // 파일 보관기간
+    @Value("${batch.file-retention-days}")
+    private int retentionDays; // 파일 보관기간
 
     private final FileStore fileStore;
     private final ProductRepository productRepository;
@@ -66,7 +68,7 @@ public class ProductFileService {
      */
     @Transactional
     public void deleteExpiredFiles() {
-        LocalDateTime baseDate = LocalDateTime.now().minusDays(RETENTION_DAYS);
+        LocalDateTime baseDate = LocalDateTime.now().minusDays(retentionDays);
         List<ProductFile> targets = productFileRepository.findAllByDelYnAndDelDateBefore("Y", baseDate);
 
         for (ProductFile productFile : targets) {

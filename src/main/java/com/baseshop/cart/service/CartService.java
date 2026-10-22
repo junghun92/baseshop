@@ -1,6 +1,5 @@
 package com.baseshop.cart.service;
 
-import com.baseshop.board.dto.BoardListResDto;
 import com.baseshop.cart.dto.CartCreateReqDto;
 import com.baseshop.cart.dto.CartListReqDto;
 import com.baseshop.cart.dto.CartListResDto;
@@ -13,14 +12,15 @@ import com.baseshop.member.entity.Member;
 import com.baseshop.member.repository.MemberRepository;
 import com.baseshop.product.entity.Product;
 import com.baseshop.product.repository.ProductRepository;
-import com.baseshop.product.type.ProductStatusType;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -92,5 +92,11 @@ public class CartService {
         Page<Cart> cartList = cartQueryRepository.findCartList(memberId, cartListReqDto);
 
         return new PagingResDto<>(cartList.map(CartListResDto::new));
+    }
+
+    /** 결제완료시 주문한 상품을 장바구니에서 삭제 */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void deleteOrderItemList(Long memberId, List<Long> productIdList) {
+        cartRepository.deleteByMemberIdAndProductIdList(memberId, productIdList);
     }
 }

@@ -104,7 +104,6 @@ public class OrderFacade {
             // 포트원 취소는 완료
             // DB 반영만 실패 -> 웹훅에서 처리 됨
             log.error("취소 완료 후 DB 반영 실패 orderId={}, portonePaymentId={}", orderId, portonePaymentId, e);
-            throw new IllegalArgumentException("취소 완료되었습니다. 주문 상태는 잠시 후 반영됩니다.");
         }
 
         return orderId;

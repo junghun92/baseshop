@@ -44,7 +44,7 @@ public class PaymentCompleteResDto {
         this.message = createMessage(payment);
     }
 
-    public static PaymentCompleteResDto from(Order order, Payment payment) {
+    public static PaymentCompleteResDto of(Order order, Payment payment) {
         return new PaymentCompleteResDto(order, payment);
     }
 
@@ -59,5 +59,9 @@ public class PaymentCompleteResDto {
 
     public boolean isReady() {
         return paymentStatusType == PaymentStatusType.READY;
+    }
+
+    public boolean isPaid() {
+        return paymentStatusType == PaymentStatusType.PAID;
     }
 }

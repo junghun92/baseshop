@@ -1,7 +1,7 @@
 package com.baseshop.order.facade;
 
 import com.baseshop.order.entity.Order;
-import com.baseshop.order.service.OrderService;
+import com.baseshop.order.type.OrderStatusType;
 import com.baseshop.payment.entity.Payment;
 import com.baseshop.payment.service.PaymentService;
 import com.baseshop.payment.type.PaymentStatusType;
@@ -18,7 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class OrderProcessor {
 
-    private final OrderService orderService;
     private final PaymentService paymentService;
     private final ProductService productService;
 
@@ -47,7 +46,7 @@ public class OrderProcessor {
 
         // 3. 주문취소
         Order order = payment.getOrder();
-        order.cancel();
+        order.transitTo(OrderStatusType.CANCELLED);
 
         // 4. 재고복구
         productService.updateStockRestore(order.getOrderItemList());

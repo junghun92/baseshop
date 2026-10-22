@@ -3,7 +3,7 @@ package com.baseshop.payment.controller;
 import com.baseshop.common.handler.ApiResponse;
 import com.baseshop.payment.dto.PaymentCompleteReqDto;
 import com.baseshop.payment.dto.PaymentCompleteResDto;
-import com.baseshop.payment.service.PaymentFacade;
+import com.baseshop.payment.facade.PaymentFacade;
 import com.baseshop.portone.PortOneWebhookVerifier;
 import com.baseshop.portone.dto.PortOneWebhookReqDto;
 import com.baseshop.security.userdetails.CustomUserDetails;

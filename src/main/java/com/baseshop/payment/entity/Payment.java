@@ -70,27 +70,49 @@ public class Payment extends BaseEntity {
         return new Payment(order);
     }
 
-    //결제완료
+    /** 결제완료 */
     public void complete(PayMethodType payMethodType, String transactionId, LocalDateTime paidDate) {
-        this.paymentStatusType = PaymentStatusType.PAID;
-        this.transactionId = transactionId;
+        transitTo(PaymentStatusType.PAID);
         this.payMethodType = payMethodType;
+        this.transactionId = transactionId;
         this.paidDate = paidDate;
     }
 
-    //결제실패
-    public void fail(String failReason, LocalDateTime failedDate){
-        this.paymentStatusType = PaymentStatusType.FAILED;
+    /** 결제실패 */
+    public void fail(String failReason, LocalDateTime failedDate) {
+        transitTo(PaymentStatusType.FAILED);
         this.failReason = failReason;
         this.failedDate = failedDate;
     }
 
-    //결제취소
+    /** 결제취소 */
     public void cancel(CancelRequesterType cancelRequester, long cancelAmount, String cancelReason, LocalDateTime cancelledDate) {
-        this.paymentStatusType = PaymentStatusType.CANCELLED;
+        transitTo(PaymentStatusType.CANCELLED);
         this.cancelRequester = cancelRequester;
         this.cancelAmount = cancelAmount;
         this.cancelReason = cancelReason;
         this.cancelledDate = cancelledDate;
     }
+
+    /**
+     * 결제 상태 변경 (상태 변경은 이 메서드로만)
+     * - 전이 규칙(PaymentStatusType.canTransitTo)에 맞을 때만 변경
+     */
+    private void transitTo(PaymentStatusType target) {
+        if (!this.paymentStatusType.canTransitTo(target)) {
+            throw new IllegalArgumentException(
+                    "결제 상태를 변경할 수 없습니다. (" + this.paymentStatusType.getDescription()
+                            + " -> " + target.getDescription() + ")");
+        }
+        this.paymentStatusType = target;
+    }
+
+    public boolean isReady() {
+        return this.paymentStatusType == PaymentStatusType.READY;
+    }
+
+    public boolean isPaid() {
+        return this.paymentStatusType == PaymentStatusType.PAID;
+    }
+
 }

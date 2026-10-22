@@ -49,7 +49,7 @@ public class Order extends BaseEntity {
         return order;
     }
 
-    // 주문상품 추가: 생성 + 양방향 연결 + 총액 누적을 한 번에
+    /** 주문상품 추가: 생성 + 양방향 연결 + 총액 누적을 한 번에 */
     public OrderItem addOrderItem(Product product, int quantity) {
         OrderItem orderItem = new OrderItem(this, product, quantity);   // 같은 패키지라 접근 가능
         orderItemList.add(orderItem);
@@ -58,7 +58,7 @@ public class Order extends BaseEntity {
         return orderItem;
     }
 
-    // 상품 1건: "상품명", 2건 이상: "첫 상품명 외 N건"
+    /** 상품 1건: "상품명", 2건 이상: "첫 상품명 외 N건" */
     private void updateOrderName() {
         String firstProductName = orderItemList.get(0).getProduct().getName();
         int otherCount = orderItemList.size() - 1;
@@ -68,21 +68,30 @@ public class Order extends BaseEntity {
                 : firstProductName + " 외 " + otherCount + "건";
     }
 
-    // 주문완료
-    public void complete() {
-        this.orderStatusType = OrderStatusType.COMPLETED;
-    }
-
-    public void fail(){
-        this.orderStatusType = OrderStatusType.FAILED;
-    }
-
-    // 주문취소
-    public void cancel() {
-        if(this.orderStatusType != OrderStatusType.COMPLETED){
-            throw new IllegalArgumentException("취소할 수 없는 주문입니다.");
+    /**
+     * 주문 상태 변경 (상태 변경은 이 메서드로만)
+     * - 전이 규칙(OrderStatusType.canTransitTo)에 맞을 때만 변경
+     * - 중복 완료, 중복 취소(재고 중복 복구)를 여기서 막는다.
+     */
+    public void transitTo(OrderStatusType target) {
+        if (!this.orderStatusType.canTransitTo(target)) {
+            throw new IllegalArgumentException(
+                    "주문 상태를 변경할 수 없습니다. (" + this.orderStatusType.getDescription()
+                            + " -> " + target.getDescription() + ")");
         }
+        this.orderStatusType = target;
+    }
 
-        this.orderStatusType = OrderStatusType.CANCELLED;
+
+    /** 주문한 상품 ID 목록 */
+    public List<Long> getProductIdList() {
+        return orderItemList.stream()
+                .map(orderItem -> orderItem.getProduct().getId())
+                .toList();
+    }
+
+    /** 주문한 회원인지 확인 */
+    public boolean isOrderedBy(Long memberId) {
+        return this.member.getId().equals(memberId);
     }
 }

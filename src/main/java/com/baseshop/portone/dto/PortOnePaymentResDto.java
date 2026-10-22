@@ -49,8 +49,29 @@ public class PortOnePaymentResDto {
         return status == PortOnePaymentStatusType.FAILED;
     }
 
+
+    /** 결제 결과(완료, 실패, 취소)가 나왔는지 */
+    public boolean hasResult() {
+        return isPaid() || isFailed() || isCancelled();
+    }
+
     private static LocalDateTime toKst(OffsetDateTime dateTime) {
         return dateTime == null ? null : dateTime.atZoneSameInstant(KST).toLocalDateTime();
+    }
+
+    /** 포트원 결제완료인데 주문금액과 결제금액이 다른지 확인 */
+    public boolean isAmountMismatch(long orderAmount) {
+        return isPaid() && amount.getTotal() != orderAmount;
+    }
+
+    /** 결제수단 타입 (결제수단 정보가 없으면 null) */
+    public String getMethodType() {
+        return method == null ? null : method.getType();
+    }
+
+    /** 실패 사유 (실패 정보가 없으면 "결제실패") */
+    public String getFailReason() {
+        return failure == null ? "결제실패" : failure.getReason();
     }
 
     @Getter
