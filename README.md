@@ -4,10 +4,10 @@ Spring Boot + JPA 기반 쇼핑몰 백엔드 프로젝트입니다.
 회원, 게시판, 상품, 장바구니, 주문, 결제 API를 만들고, **홈서버에 직접 Docker 환경을 구축해 HTTPS와 CI/CD까지 운영**하고 있습니다.
 결제는 **포트원(PortOne) V2**를 연동해 결제 검증, 웹훅 동기화, 환불까지 처리했고, 재고와 결제 상태의 **동시성·정합성**에 가장 많이 신경 썼습니다.
 
-- 🚀 서비스 : [배포 URL]
-- 📄 API 문서 (Swagger) : [Swagger URL]
+- 🚀 서비스 : https://baseshop.co.kr
+- 📄 API 문서 (Swagger) : https://baseshop.co.kr/swagger-ui/index.html
 
-> 프론트엔드(Vue 3)는 API 연동 확인용으로 AI 도구를 활용해 만들었습니다. 이 저장소는 **백엔드**를 다룹니다.
+> 프론트엔드(Vue 3)는 API 연동 확인용으로 AI 도구를 활용해 만들었습니다.
 
 <br>
 
