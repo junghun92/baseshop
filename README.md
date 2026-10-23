@@ -90,26 +90,6 @@ flowchart LR
 
 <img width="1870" height="1022" alt="baseshop" src="https://github.com/user-attachments/assets/8fdb56e1-3034-497c-a698-36fa4ea7f646" />
 
-
-<details>
-<summary><b>관계 설명</b></summary>
-
-| 관계 | 종류 | 설명 |
-| --- | --- | --- |
-| members – orders | 1 : N | 회원 한 명이 여러 주문 |
-| orders – order_item | 1 : N | 주문 하나에 여러 상품. 주문 엔티티에서만 양방향(`orderItemList`) |
-| product – order_item | 1 : N | 주문 상품은 상품을 참조하되 가격은 따로 저장 |
-| orders – payment | 1 : 1 | `payment.order_id` 유니크 FK. 결제 쪽에서만 주문을 참조(단방향) |
-| members – cart, product – cart | 1 : N | 회원과 상품의 다대다를 장바구니 행으로 풀어냄 |
-| product – product_file | 1 : N | 이미지 교체 이력이 쌓임. 단방향(상품 → 이미지 컬렉션 없음) |
-| members – board | 1 : N | 작성자 |
-| members – refresh_token | 1 : 0..1 | FK가 아니라 `username`으로 연결 |
-
-- 연관관계는 모두 LAZY이고, 필요한 곳에서만 fetch join(ToOne) 또는 `default_batch_fetch_size`(ToMany)로 가져옵니다.
-- 양방향은 생명주기가 같은 주문 – 주문상품에만 썼습니다.
-
-</details>
-
 <br>
 
 ## ✨ 주요 기능
