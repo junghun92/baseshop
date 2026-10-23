@@ -7,8 +7,6 @@ Spring Boot + JPA 기반 쇼핑몰 백엔드 프로젝트입니다.
 - 🚀 서비스 : https://baseshop.co.kr
 - 📄 API 문서 (Swagger) : https://baseshop.co.kr/swagger-ui/index.html
 
-> 프론트엔드(Vue 3)는 API 연동 확인용으로 AI 도구를 활용해 만들었습니다. 이 저장소는 **백엔드**를 다룹니다.
-
 <br>
 
 ## 📌 목차
