@@ -4,10 +4,10 @@ Spring Boot + JPA 기반 쇼핑몰 백엔드 프로젝트입니다.
 회원, 게시판, 상품, 장바구니, 주문, 결제 API를 만들고, **홈서버에 직접 Docker 환경을 구축해 HTTPS와 CI/CD까지 운영**하고 있습니다.
 결제는 **포트원(PortOne) V2**를 연동해 결제 검증, 웹훅 동기화, 환불까지 처리했고, 재고와 결제 상태의 **동시성·정합성**에 가장 많이 신경 썼습니다.
 
-- 🚀 서비스 : https://baseshop.co.kr
-- 📄 API 문서 (Swagger) : https://baseshop.co.kr/swagger-ui/index.html
+- 🚀 서비스 : [배포 URL]
+- 📄 API 문서 (Swagger) : [Swagger URL]
 
-> 프론트엔드(Vue 3)는 API 연동 확인용으로 AI 도구를 활용해 만들었습니다.
+> 프론트엔드(Vue 3)는 API 연동 확인용으로 AI 도구를 활용해 만들었습니다. 이 저장소는 **백엔드**를 다룹니다.
 
 <br>
 
@@ -88,72 +88,139 @@ flowchart LR
 
 ## 🗂 ERD
 
+![ERD]([dbdiagram.io에서 내보낸 ERD 이미지 링크])
+
+<details>
+<summary><b>ERD (Mermaid, 컬럼 전체)</b></summary>
+
 ```mermaid
 erDiagram
     MEMBERS ||--o{ BOARD : "작성"
     MEMBERS ||--o{ CART : "담기"
-    PRODUCT ||--o{ CART : ""
+    PRODUCT ||--o{ CART : "담긴 상품"
     MEMBERS ||--o{ ORDERS : "주문"
-    ORDERS ||--|{ ORDER_ITEM : "포함"
-    PRODUCT ||--o{ ORDER_ITEM : ""
-    ORDERS ||--|| PAYMENT : "결제"
-    PRODUCT ||--o{ PRODUCT_FILE : "이미지"
+    ORDERS ||--|{ ORDER_ITEM : "주문 상품"
+    PRODUCT ||--o{ ORDER_ITEM : "주문된 상품"
+    ORDERS ||--o| PAYMENT : "결제 (주문당 1건)"
+    PRODUCT ||--o{ PRODUCT_FILE : "이미지 (교체 이력)"
+    MEMBERS ||..o| REFRESH_TOKEN : "username으로 연결 (FK 아님)"
 
     MEMBERS {
         bigint member_id PK
-        varchar username UK
-        varchar email UK
-        varchar member_role_type
+        varchar(255) username UK "로그인 아이디"
+        varchar(255) password "BCrypt 해시"
+        varchar(255) email UK "소문자 정규화"
+        varchar(255) member_role_type "USER / ADMIN"
+    }
+    BOARD {
+        bigint board_id PK
+        bigint member_id FK "작성자"
+        varchar(20) board_type "QNA / INFO / FREE"
+        varchar(255) title
+        varchar(255) content
     }
     PRODUCT {
         bigint product_id PK
-        varchar name
-        int price
-        int quantity "재고"
-        varchar product_status_type "SALE / SOLD_OUT / STOP"
+        varchar(255) name
+        text description
+        int price "현재 판매가"
+        int quantity "재고 (주문 시 비관적 락으로 차감)"
+        varchar(20) product_status_type "SALE / SOLD_OUT / STOP (STOP = 소프트 삭제)"
     }
-    ORDERS {
-        bigint order_id PK
-        bigint member_id FK
-        varchar order_name
-        bigint total_price
-        varchar order_status_type "PENDING / COMPLETED / CANCELLED / FAILED"
-    }
-    ORDER_ITEM {
-        bigint order_item_id PK
-        bigint order_id FK
+    PRODUCT_FILE {
+        bigint id PK
         bigint product_id FK
-        int order_price "주문 당시 가격"
-        int quantity
-    }
-    PAYMENT {
-        bigint payment_id PK
-        bigint order_id FK, UK
-        varchar portone_payment_id UK
-        bigint amount
-        varchar payment_status_type "READY / PAID / FAILED / CANCELLED"
-        varchar transaction_id
-        varchar cancel_requester
+        varchar(255) original_file_name "업로드 원본 파일명"
+        varchar(100) store_file_name UK "UUID 저장 파일명"
+        varchar(255) store_file_path "상대경로 (R2 객체 키)"
+        varchar(10) ext "확장자"
+        bigint file_size
+        varchar(1) del_yn "N 사용중 / Y 삭제 표시"
+        datetime del_date "삭제 표시 시점 (7일 뒤 배치 삭제)"
     }
     CART {
         bigint cart_id PK
         bigint member_id FK
         bigint product_id FK
+        int quantity "같은 상품을 다시 담으면 수량 합산"
+    }
+    ORDERS {
+        bigint order_id PK
+        bigint member_id FK "주문 회원"
+        varchar(255) order_name "첫 상품명 외 N건"
+        bigint total_price "주문상품 합계"
+        varchar(20) order_status_type "PENDING / COMPLETED / CANCELLED / FAILED"
+    }
+    ORDER_ITEM {
+        bigint order_item_id PK
+        bigint order_id FK
+        bigint product_id FK
+        int order_price "주문 당시 가격 (스냅샷)"
         int quantity
     }
-    PRODUCT_FILE {
-        bigint id PK
-        bigint product_id FK
-        varchar store_file_path
-        char del_yn
+    PAYMENT {
+        bigint payment_id PK
+        bigint order_id FK, UK "주문당 결제 1건"
+        varchar(255) portone_payment_id UK "pay-UUID, 포트원 결제 ID"
+        bigint amount "결제 요청 금액 (금액 검증 기준)"
+        varchar(20) payment_status_type "READY / PAID / FAILED / CANCELLED"
+        varchar(255) transaction_id "포트원 채번 거래 ID"
+        varchar(20) pay_method_type "CARD / EASY_PAY / TRANSFER 등"
+        datetime paid_date
+        varchar(255) fail_reason
+        datetime failed_date
+        varchar(20) cancel_requester "CUSTOMER / ADMIN"
+        bigint cancel_amount
+        varchar(255) cancel_reason
+        datetime cancelled_date
     }
-    BOARD {
-        bigint board_id PK
-        bigint member_id FK
-        varchar board_type "QNA / INFO / FREE"
-        varchar title
+    REFRESH_TOKEN {
+        bigint refresh_token_id PK
+        varchar(500) refresh_token UK
+        varchar(255) username UK "회원당 1개"
+        datetime expiry_date
     }
 ```
+
+</details>
+
+**공통 컬럼** : `refresh_token`을 제외한 모든 테이블에 `reg_id`, `reg_date`, `mod_id`, `mod_date`가 있습니다. (JPA Auditing, `BaseEntity`)
+
+<details>
+<summary><b>테이블 설명</b></summary>
+
+| 테이블 | 설명 | 설계 포인트 |
+| --- | --- | --- |
+| `members` | 회원 | `username`, `email` 유니크. 비밀번호는 BCrypt 해시. 권한은 USER / ADMIN |
+| `board` | 게시글 | 작성자(`member_id`)만 수정 · 삭제 가능. 게시판 구분은 enum 문자열 저장 |
+| `product` | 상품 | 재고(`quantity`)는 주문 시 `SELECT ... FOR UPDATE`로 락을 잡고 차감. 삭제는 상태를 STOP으로 바꾸는 소프트 삭제 |
+| `product_file` | 상품 이미지 | 교체해도 이전 행을 지우지 않고 `del_yn = 'Y'`로 표시 → 7일 뒤 배치가 실제 파일과 행 삭제. 경로는 상대경로만 저장 (로컬 ↔ R2 전환에도 DB 값 그대로) |
+| `cart` | 장바구니 | 같은 상품을 다시 담으면 새 행 대신 수량 합산 (서비스에서 조회 후 처리). 결제 완료 시 주문한 상품만 삭제 |
+| `orders` | 주문 | 결제 전 PENDING으로 생성. 결제 결과에 따라 COMPLETED / FAILED, 결제 후 취소는 CANCELLED. 상태 전이 규칙을 엔티티가 관리 |
+| `order_item` | 주문 상품 | `order_price`에 주문 당시 가격을 저장해서, 나중에 상품 가격이 바뀌어도 주문 금액은 그대로 |
+| `payment` | 결제 | 주문당 1건(`order_id` 유니크). `portone_payment_id`로 포트원과 연결. `amount`는 포트원 실제 결제 금액과 비교하는 기준. 상태별 시점 · 사유(완료 · 실패 · 취소)를 컬럼으로 기록 |
+| `refresh_token` | Refresh Token | 회원당 1개(`username` 유니크). 재발급 때 저장된 값과 비교, 로그아웃 시 삭제. 회원과 FK 없이 username으로 조회 |
+
+</details>
+
+<details>
+<summary><b>관계 설명</b></summary>
+
+| 관계 | 종류 | 설명 |
+| --- | --- | --- |
+| members – orders | 1 : N | 회원 한 명이 여러 주문 |
+| orders – order_item | 1 : N | 주문 하나에 여러 상품. 주문 엔티티에서만 양방향(`orderItemList`) |
+| product – order_item | 1 : N | 주문 상품은 상품을 참조하되 가격은 따로 저장 |
+| orders – payment | 1 : 1 | `payment.order_id` 유니크 FK. 결제 쪽에서만 주문을 참조(단방향) |
+| members – cart, product – cart | 1 : N | 회원과 상품의 다대다를 장바구니 행으로 풀어냄 |
+| product – product_file | 1 : N | 이미지 교체 이력이 쌓임. 단방향(상품 → 이미지 컬렉션 없음) |
+| members – board | 1 : N | 작성자 |
+| members – refresh_token | 1 : 0..1 | FK가 아니라 `username`으로 연결 |
+
+- 연관관계는 모두 LAZY이고, 필요한 곳에서만 fetch join(ToOne) 또는 `default_batch_fetch_size`(ToMany)로 가져옵니다.
+- 양방향은 생명주기가 같은 주문 – 주문상품에만 썼습니다.
+
+</details>
 
 <br>
 
@@ -164,7 +231,7 @@ erDiagram
 | 회원 · 인증 | 회원가입, 로그인, 로그아웃, 토큰 재발급 | Access / Refresh 분리, Refresh는 httpOnly 쿠키 + DB 저장(회원당 1개) |
 | 게시판 | CRUD, 페이징 · 검색 | 작성자 본인만 수정 · 삭제 (소유권 검증 → 403) |
 | 상품 | 등록 · 수정 · 삭제(관리자), 조회, 이미지 업로드 | 삭제는 STOP 상태로 소프트 삭제, 재고는 증감값 API로 분리, 이미지는 R2 |
-| 장바구니 | 담기, 수량 변경, 삭제, 목록 | (회원 + 상품) 유니크 → 같은 상품은 수량만 증가 |
+| 장바구니 | 담기, 수량 변경, 삭제, 목록 | 같은 상품을 다시 담으면 수량만 증가, 결제 완료 시 주문한 상품만 삭제 |
 | 주문 | 주문서, 주문 생성, 목록, 취소 | 재고 선차감(비관적 락), 주문 당시 가격 저장, 취소 시 포트원 환불 + 재고 복구 |
 | 결제 | 결제완료, 웹훅, 만료 배치 | 포트원 재조회로 검증, 금액 불일치 자동 환불, 세 경로가 같은 동기화 규칙 사용 |
 
@@ -400,7 +467,7 @@ com.baseshop
 
 ## ▶ 로컬 실행
 
-**필요한 것** : JDK 17, MySQL 8.x
+**필요한 것** : JDK 17, MySQL 8.x (또는 MariaDB)
 
 설정 파일은 git에 올리지 않습니다. `src/main/resources/application-local.properties`를 만들고 아래 키를 채워주세요.
 
