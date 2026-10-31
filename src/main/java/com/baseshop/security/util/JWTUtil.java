@@ -52,9 +52,9 @@ public class JWTUtil {
         return createToken(refreshTokenExpireTime, username, memberId, role, refreshTokenName);
     }
 
-    private String createToken(long accessTokenExpireTime, String username, Long memberId, String role, String tokenName) {
+    private String createToken(long tokenExpireTime, String username, Long memberId, String role, String tokenName) {
         Date now = new Date();
-        Date expireDate = new Date(now.getTime() + accessTokenExpireTime);
+        Date expireDate = new Date(now.getTime() + tokenExpireTime);
 
         return Jwts.builder()
                 .subject(username)

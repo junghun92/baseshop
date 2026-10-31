@@ -3,7 +3,6 @@ package com.baseshop.security.token.service;
 import com.baseshop.security.util.JWTUtil;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,26 +32,23 @@ public class TokenService {
         
         // 서명,만료 검증
         Claims claims = jwtUtil.getClaims(refreshToken);
-
-        // refreshToken 토큰인지 확인
-        if(!jwtUtil.getRefreshTokenName().equals(claims.get("tokenType", String.class))){
-            throw new JwtException("refreshToken이 아닙니다.");
-        }
-
         Long memberId = claims.get("memberId", Long.class);
         String username = claims.getSubject();
         String role = claims.get("role", String.class);
+        String tokenType = claims.get("tokenType", String.class);
 
+        // refreshToken 토큰인지 확인
+        if(!jwtUtil.getRefreshTokenName().equals(tokenType)){
+            throw new JwtException("refreshToken이 아닙니다.");
+        }
 
-        // DB에 저장된 refreshToken 값이랑 같은지 확인 (로그아웃했거나 이미 교체된 토큰 차단)
-        boolean sameToken = refreshTokenService.isSameToken(username, refreshToken);
-        if(!sameToken){
-            throw new JwtException("저장된 refreshToken과 일치하지 않습니다.");
+        // redis refreshToken 저장 값 이랑 비교
+        if(!refreshTokenService.isSameToken(username, refreshToken)){
+            refreshTokenService.deleteByRefreshToken(refreshToken); // 강제 로그아웃
+            throw new JwtException("저장 된 refreshToken과 일치하지 않습니다.");
         }
 
         // accessToken 재발급
-        String newAccessToken = jwtUtil.createAccessToken(memberId, username, role);
-
-        return newAccessToken;
+        return jwtUtil.createAccessToken(memberId, username, role);
     }
 }

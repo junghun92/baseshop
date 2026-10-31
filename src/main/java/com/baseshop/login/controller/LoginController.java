@@ -1,8 +1,8 @@
 package com.baseshop.login.controller;
 
 import com.baseshop.common.handler.ApiResponse;
-import com.baseshop.login.service.LoginService;
 import com.baseshop.member.dto.LoginReqDto;
+import com.baseshop.security.token.service.RefreshTokenService;
 import com.baseshop.security.util.JWTUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.*;
 @Tag(name = "로그인 API")
 public class LoginController {
 
-    private final LoginService loginService;
+    private final RefreshTokenService refreshTokenService;
     private final JWTUtil jwtUtil;
 
     @PostMapping("/login")
@@ -31,13 +31,10 @@ public class LoginController {
     public ApiResponse<Void> logout(
             @CookieValue(name = "${jwt.refresh-token-name}", required = false) String refreshToken,
             HttpServletResponse response) {
-
-        //refreshToken DB 삭제
-        loginService.logout(refreshToken);
-        
-        //refreshToken 쿠키 삭제
+        //쿠키 삭제
         response.addHeader(HttpHeaders.SET_COOKIE, jwtUtil.deleteRefreshCookie().toString());
-        
+
+        refreshTokenService.deleteByRefreshToken(refreshToken);
         return ApiResponse.success(null);
     }
 }

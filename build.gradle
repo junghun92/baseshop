@@ -60,6 +60,9 @@ dependencies {
     implementation platform('software.amazon.awssdk:bom:2.31.0')
     // S3 클라이언트 (접속 주소는 R2Config에서 R2로 변경)
     implementation 'software.amazon.awssdk:s3'
+
+    //redis
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 }
 
 tasks.named('test') {

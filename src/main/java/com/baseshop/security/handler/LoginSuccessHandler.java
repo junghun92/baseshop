@@ -36,8 +36,8 @@ public class LoginSuccessHandler implements AuthenticationSuccessHandler {
         String accessToken = jwtUtil.createAccessToken(memberId, username, role);
         String refreshToken = jwtUtil.createRefreshToken(memberId, username, role);
 
-        // Refresh Token DB 저장
-        refreshTokenService.createOrUpdateRefreshToken(username, refreshToken);
+        // Refresh Token 저장
+        refreshTokenService.createRefreshToken(username, refreshToken);
 
         // Refresh Token Cookie 생성 (재발급 API에만 쿠키 전송되도록)
         ResponseCookie refreshCookie = jwtUtil.createRefreshCookie(refreshToken);
