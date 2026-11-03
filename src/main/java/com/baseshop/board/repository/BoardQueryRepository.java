@@ -25,12 +25,18 @@ public class BoardQueryRepository {
     public Page<Board> findBoardList(BoardListReqDto boardListReqDto){
         PageRequest pageRequest = boardListReqDto.toPageRequest();
 
-        List<Board> content = queryFactory
-                .select(board)
+        List<Long> idList = queryFactory
+                .select(board.id)
                 .from(board)
                 .where(getBoardTypeEq(boardListReqDto.getBoardType()))
+                .orderBy(board.id.desc())
                 .offset(pageRequest.getOffset())
                 .limit(pageRequest.getPageSize())
+                .fetch();
+
+        List<Board> content = idList.isEmpty() ? List.of() : queryFactory
+                .selectFrom(board)
+                .where(board.id.in(idList))
                 .orderBy(board.id.desc())
                 .fetch();
 
