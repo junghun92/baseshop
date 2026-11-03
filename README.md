@@ -30,7 +30,7 @@ Spring Boot + JPA 기반 쇼핑몰 백엔드 프로젝트입니다.
 | 구분 | 기술 |
 | --- | --- |
 | Backend | Java 17, Spring Boot 4.1, Spring Data JPA, QueryDSL 5, Spring Security, JWT(jjwt 0.13), Bean Validation, springdoc-openapi |
-| Database | MySQL 8.4 |
+| Database | MySQL 8.4, Redis 7 |
 | 외부 연동 | PortOne V2 (결제 조회 · 취소 · 웹훅), Cloudflare R2 (상품 이미지, AWS SDK v2 S3 호환) |
 | Infra | Ubuntu Server 24.04 (홈서버), Docker, Docker Compose, Nginx |
 | CI/CD | GitHub Actions, GHCR (GitHub Container Registry) |
@@ -63,8 +63,8 @@ flowchart LR
     SP -->|"이미지 업로드"| R2["Cloudflare R2"]
 ```
 
-- 클라우드 대신 **집 데스크탑에 Ubuntu Server를 설치**하고, Nginx · Spring · MySQL을 컨테이너로 운영합니다.
-- Spring과 MySQL은 호스트 포트를 열지 않고 Docker 내부 네트워크에서만 통신합니다.
+- 클라우드 대신 **집 데스크탑에 Ubuntu Server를 설치**하고, Nginx · Spring · MySQL · REDIS를 컨테이너로 운영합니다.
+- Spring, MySQL, Redis는 호스트 포트를 열지 않고 Docker 내부 네트워크에서만 통신합니다.
 - 프론트와 API를 같은 도메인(`/api`)으로 묶어 CORS 없이 동작합니다.
 - 유동 IP는 DDNS 컨테이너가 감지해 Cloudflare DNS 레코드를 자동으로 수정합니다.
 
@@ -86,7 +86,8 @@ flowchart LR
 
 ## 🗂 ERD
 
-<img width="1870" height="1022" alt="baseshop" src="https://github.com/user-attachments/assets/8fdb56e1-3034-497c-a698-36fa4ea7f646" />
+<img width="1397" height="803" alt="ERD" src="https://github.com/user-attachments/assets/f0e5a5c4-2c9b-403b-9a11-21c4e138a365" />
+
 
 <br>
 
@@ -234,9 +235,9 @@ public boolean canTransitTo(OrderStatusType target) {
 <summary><b>인증 (JWT Access + Refresh)</b></summary>
 
 - 로그인은 JSON 기반 커스텀 `LoginFilter`, 이후 요청은 `JWTFilter`가 서명 · 만료 · 토큰 종류를 검증합니다.
-- Access Token은 짧게 Authorization 헤더로, Refresh Token은 httpOnly · SameSite=Lax · Secure 쿠키로 내려주고 DB에 회원당 1개 저장합니다.
-- 로그아웃하면 DB의 Refresh Token을 삭제해 재발급을 막습니다.
-- 토큰에 tokenType을 넣어 Refresh Token을 Access Token처럼 쓰는 것을 막았습니다.
+- Access Token은 짧게 Authorization 헤더로, Refresh Token은 httpOnly · SameSite=Lax · Secure 쿠키로 내려주고 Redis에 회원당 1개만 저장합니다.
+- 재발급 시 쿠키의 Refresh Token과 Redis에 저장된 값을 비교해 일치할 때만 새 Access Token을 발급합니다.
+- 로그아웃 시 쿠키의 Refresh Token에서 사용자를 꺼내 Redis 키를 삭제해 재발급을 차단합니다.
 
 </details>
 
@@ -290,8 +291,6 @@ public boolean canTransitTo(OrderStatusType target) {
 | Spring이 DB 연결 실패 | MySQL 초기화 전에 Spring이 먼저 접속 | MySQL healthcheck + `depends_on: service_healthy` |
 | 배포 후 POST만 403 | Nginx가 Host 헤더를 바꿔 전달 → 다른 출처로 판단 | `proxy_set_header Host $http_host` |
 | R2 업로드 403 | R2가 chunked encoding을 지원하지 않음 | `chunkedEncodingEnabled(false)` |
-
-> 자세한 과정은 [정리 문서 링크]에 있습니다.
 
 <br>
 
