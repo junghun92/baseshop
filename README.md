@@ -31,6 +31,8 @@ Spring Boot + JPA 기반 쇼핑몰 백엔드 프로젝트입니다.
 | --- | --- |
 | Backend | Java 17, Spring Boot 4.1, Spring Data JPA, QueryDSL 5, Spring Security, JWT(jjwt 0.13), Bean Validation, springdoc-openapi |
 | Database | MySQL 8.4, Redis 7 |
+| Monitoring | Spring Boot Actuator, Micrometer, Prometheus, Grafana, Slack 알림
+| Access | Cloudflare Tunnel + Cloudflare Access (Zero Trust, 모니터링 도구 접근)
 | 외부 연동 | PortOne V2 (결제 조회 · 취소 · 웹훅), Cloudflare R2 (상품 이미지, AWS SDK v2 S3 호환) |
 | Infra | Ubuntu Server 24.04 (홈서버), Docker, Docker Compose, Nginx |
 | CI/CD | GitHub Actions, GHCR (GitHub Container Registry) |
@@ -48,25 +50,39 @@ flowchart LR
     U["사용자 브라우저"] -->|"HTTPS"| CF["Cloudflare DNS"]
     PO["포트원 웹훅"] -->|"HTTPS"| CF
     CF --> N
+    ADM["관리자"] -->|"HTTPS<br>grafana.baseshop.co.kr"| ACC["Cloudflare Access<br>허용 계정만 통과"]
+    ACC --> TUN["Cloudflare Tunnel"]
     subgraph S["홈서버 (Ubuntu 24.04, UFW: 80/443/SSH만 개방)"]
         subgraph D["Docker Compose 내부 네트워크"]
             N["Nginx<br>80 → 443 리다이렉트<br>HTTPS · Vue 정적 파일 · /api 프록시"]
             SP["Spring Boot<br>(외부 비공개)"]
-            DB[("MySQL<br>(외부 비공개)")]
+            DB[("MySQL<br>(서버 로컬만 접근)")]
+            RD[("Redis<br>Refresh Token<br>(외부 비공개)")]
             C["certbot<br>인증서 발급 · 갱신"]
             DD["cloudflare-ddns<br>IP 변경 감지"]
+            PR["Prometheus<br>메트릭 수집 · 저장"]
+            GF["Grafana<br>대시보드 · 알림"]
+            CFD["cloudflared<br>터널 연결"]
         end
     end
     N -->|"/api/**"| SP
     SP --> DB
+    SP --> RD
+    PR -->|"/actuator/prometheus<br>15초마다 수집"| SP
+    GF -->|"조회"| PR
+    CFD -.->|"서버에서 먼저 연결"| TUN
+    TUN -->|"요청 전달"| CFD
+    CFD --> GF
+    GF -->|"서버 다운 알림"| SL["Slack"]
     SP -->|"결제 조회 · 취소"| PG["PortOne API"]
     SP -->|"이미지 업로드"| R2["Cloudflare R2"]
 ```
 
-- 클라우드 대신 **집 데스크탑에 Ubuntu Server를 설치**하고, Nginx · Spring · MySQL · REDIS를 컨테이너로 운영합니다.
-- Spring, MySQL, Redis는 호스트 포트를 열지 않고 Docker 내부 네트워크에서만 통신합니다.
+- 클라우드 대신 **집 데스크탑에 Ubuntu Server를 설치**하고, Nginx · Spring · MySQL · Redis를 컨테이너로 운영합니다.
+- 외부에 열린 포트는 **Nginx 80/443 뿐**입니다. Spring, Redis는 호스트 포트를 열지 않고 Docker 내부 네트워크에서만 통신하며, MySQL은 서버 로컬(127.0.0.1)에서만 접근할 수 있습니다.
 - 프론트와 API를 같은 도메인(`/api`)으로 묶어 CORS 없이 동작합니다.
 - 유동 IP는 DDNS 컨테이너가 감지해 Cloudflare DNS 레코드를 자동으로 수정합니다.
+- **모니터링** : Prometheus가 Spring의 메트릭을 수집하고 Grafana로 대시보드와 Slack 알림을 구성했습니다. 두 도구 모두 포트를 열지 않고, Grafana는 **Cloudflare Tunnel + Access**로 허용된 계정만 접근합니다.
 
 ### CI/CD
 
