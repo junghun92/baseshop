@@ -111,7 +111,7 @@ flowchart LR
 
 | 도메인 | 기능 | 포인트 |
 | --- | --- | --- |
-| 회원 · 인증 | 회원가입, 로그인, 로그아웃, 토큰 재발급 | Access / Refresh 분리, Refresh는 httpOnly 쿠키 + DB 저장(회원당 1개) |
+| 회원 · 인증 | 회원가입, 로그인, 로그아웃, 토큰 재발급 | Access / Refresh 분리, Refresh는 httpOnly 쿠키 + Redis 저장(회원당 1개, TTL 자동 만료) |
 | 게시판 | CRUD, 페이징 · 검색 | 작성자 본인만 수정 · 삭제 (소유권 검증 → 403) |
 | 상품 | 등록 · 수정 · 삭제(관리자), 조회, 이미지 업로드 | 삭제는 STOP 상태로 소프트 삭제, 재고는 증감값 API로 분리, 이미지는 R2 |
 | 장바구니 | 담기, 수량 변경, 삭제, 목록 | 같은 상품을 다시 담으면 수량만 증가, 결제 완료 시 주문한 상품만 삭제 |
@@ -293,6 +293,56 @@ public boolean canTransitTo(OrderStatusType target) {
 
 </details>
 
+### 게시판 목록 조회 성능 개선 (커버링 인덱스)
+
+**측정 환경**
+| 항목 | 값 |
+| --- | --- |
+| 데이터 | 게시글 100만 건 (QNA 약 33만 건) |
+| 테이블 / 인덱스 크기 | 884MB / 23MB |
+| InnoDB 버퍼 풀 | 128MB (데이터가 메모리보다 큼) |
+| 쿼리 | `board_type = 'QNA'` 최신순, `LIMIT 300000, 10` (3만 번째 페이지) |
+| 측정 | `EXPLAIN ANALYZE`, 3회 실행 후 첫 회 제외 |
+
+**문제**
+- 데이터가 늘자 뒤 페이지 조회가 9초 이상 걸림
+- `board_type` 인덱스가 없어 PK(테이블)를 역순으로 90만 행 읽으면서 QNA만 걸러냄
+- `SELECT *` + offset 이라 건너뛸 30만 행까지 전부 테이블에서 읽고 버림
+
+**해결**
+1. `board_type` 인덱스 추가 (InnoDB 보조 인덱스에 PK가 포함돼 `board_id` 정렬까지 인덱스로 처리)
+2. 커버링 인덱스로 id 만 먼저 조회 → 해당 id 10건만 실제 데이터 조회 (지연 조인)
+   - QueryDSL 은 FROM 서브쿼리를 지원하지 않아 쿼리 2번(id 조회 → `where id in`)으로 구현
+   - 반환 타입(`Page<Board>`)은 그대로 유지해 서비스 · 프론트 변경 없음
+
+**결과**
+| | 접근 방식 | 테이블 접근 | 실행 시간 |
+| --- | --- | --- | --- |
+| 개선 전 | PK 역순 스캔 + 필터 (90만 행) | 90만 회 | **9,427ms** |
+| 개선 후 | 커버링 인덱스 (30만 행) + PK 조회 | **10회** | **102ms** |
+| | | | **약 92배 (98.9%) 단축** |
+
+<details>
+<summary>EXPLAIN ANALYZE 원문</summary>
+
+**개선 전** — 9,427ms
+```
+-> Limit/Offset: 10/300000 row(s)  (actual time=9427..9427 rows=10 loops=1)        ← 전체 9.4초
+    -> Filter: (b1_0.board_type = 'QNA')  (actual time=0.0573..9405 rows=300010 loops=1)
+        -> Index scan on b1_0 using PRIMARY (reverse)  (actual time=0.052..9308 rows=900030 loops=1)   ← 테이블 90만 행
+```
+
+**개선 후** — 102ms
+```
+-> Nested loop inner join  (actual time=102..102 rows=10 loops=1)                   ← 전체 0.1초
+    -> Table scan on t  (actual time=98.5..98.5 rows=10 loops=1)
+        -> Materialize  (actual time=98.4..98.4 rows=10 loops=1)
+            -> Limit/Offset: 10/300000 row(s)  (actual time=98.1..98.1 rows=10 loops=1)
+                -> Covering index lookup on b1_0 using idx_board_board_type (board_type = 'QNA') (reverse)  (actual time=0.147..87.5 rows=300010 loops=1)   ← 인덱스만
+    -> Single-row index lookup on b using PRIMARY (board_id = t.board_id)  (actual time=0.00429..0.00432 rows=1 loops=10)   ← 테이블 10번
+```
+</details>
+
 <br>
 
 ## 🚨 트러블슈팅
@@ -307,6 +357,7 @@ public boolean canTransitTo(OrderStatusType target) {
 | Spring이 DB 연결 실패 | MySQL 초기화 전에 Spring이 먼저 접속 | MySQL healthcheck + `depends_on: service_healthy` |
 | 배포 후 POST만 403 | Nginx가 Host 헤더를 바꿔 전달 → 다른 출처로 판단 | `proxy_set_header Host $http_host` |
 | R2 업로드 403 | R2가 chunked encoding을 지원하지 않음 | `chunkedEncodingEnabled(false)` |
+| 게시판 뒤 페이지 조회 9초 | `board_type` 인덱스 없음 + offset 만큼 테이블을 읽고 버림 | 인덱스 추가 + 커버링 인덱스(지연 조인) → 102ms |
 
 <br>
 
@@ -348,7 +399,16 @@ com.baseshop
 
 ## ▶ 로컬 실행
 
-**필요한 것** : JDK 17, MySQL 8.x (또는 MariaDB)
+**필요한 것** : JDK 17, MySQL 8.x, Redis 7
+
+```bash
+./gradlew bootRun --args='--spring.profiles.active=local'
+```
+
+- Swagger : `http://localhost:8080/swagger-ui/index.html`
+
+<details>
+<summary>설정 파일 (application-local.properties)</summary>
 
 설정 파일은 git에 올리지 않습니다. `src/main/resources/application-local.properties`를 만들고 아래 키를 채워주세요.
 
@@ -379,12 +439,9 @@ batch.payment-expire-minutes=10
 batch.file-retention-days=7
 ```
 
-```bash
-./gradlew bootRun --args='--spring.profiles.active=local'
-```
-
-- Swagger : `http://localhost:8080/swagger-ui/index.html`
 - 로컬에서 웹훅을 받으려면 `cloudflared tunnel --url http://localhost:8080`으로 임시 HTTPS 주소를 만들어 포트원 콘솔에 등록합니다.
+
+</details>
 
 <br>
 
@@ -398,4 +455,4 @@ batch.file-retention-days=7
 | 배포 시 수십 초 중단 | Nginx upstream + 헬스체크 롤링 / 블루그린 배포 |
 | 테스트 부족, 이미지 빌드 시 테스트 생략 | 서비스 테스트 보강 → 테스트 통과 시에만 배포 |
 | 서버 1대 | 다중 인스턴스 시 스케줄러 중복 실행 방지(ShedLock) |
-| DB 백업 · 모니터링 없음 | mysqldump 백업, 모니터링 구성 |
+| DB 백업 없음 | mysqldump 정기 백업 |
