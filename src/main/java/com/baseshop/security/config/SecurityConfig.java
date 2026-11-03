@@ -48,6 +48,11 @@ public class SecurityConfig {
 
         // 경로별 인가
         http.authorizeHttpRequests(auth -> auth
+                        // health, info, prometheus는 인증 없이 (외부 차단은 nginx가 담당)
+                        .requestMatchers("/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
+                        // 나머지 액추에이터는 전부 차단
+                        .requestMatchers("/actuator/**").denyAll()
+
                         .requestMatchers(HttpMethod.POST, "/api/v1/login").permitAll() // 로그인
                         .requestMatchers(HttpMethod.POST, "/api/v1/logout").permitAll() // 로그아웃
                         .requestMatchers(HttpMethod.POST, "/api/v1/reissue").permitAll() // accessToken 재발급
