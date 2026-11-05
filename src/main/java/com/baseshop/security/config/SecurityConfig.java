@@ -19,9 +19,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.context.SecurityContextHolderFilter;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
 @RequiredArgsConstructor
@@ -63,6 +60,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/board/*").permitAll() // 게시글 조회
                         .requestMatchers(HttpMethod.GET, "/api/v1/board").permitAll() // 전체 게시글 조회
 
+                        .requestMatchers(HttpMethod.GET, "/api/v1/product/excel").hasAuthority("ADMIN") //상품 엑셀 다운로드
                         .requestMatchers(HttpMethod.POST, "/api/v1/product").hasAuthority("ADMIN") // 상품등록
                         .requestMatchers(HttpMethod.PUT, "/api/v1/product/*").hasAuthority("ADMIN") // 상품수정
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/product/*").hasAuthority("ADMIN") // 상품 판매중지
