@@ -113,7 +113,7 @@ flowchart LR
 | --- | --- | --- |
 | 회원 · 인증 | 회원가입, 로그인, 로그아웃, 토큰 재발급 | Access / Refresh 분리, Refresh는 httpOnly 쿠키 + Redis 저장(회원당 1개, TTL 자동 만료) |
 | 게시판 | CRUD, 페이징 · 검색 | 작성자 본인만 수정 · 삭제 (소유권 검증 → 403) |
-| 상품 | 등록 · 수정 · 삭제(관리자), 조회, 이미지 업로드 | 삭제는 STOP 상태로 소프트 삭제, 재고는 증감값 API로 분리, 이미지는 R2 |
+| 상품 | 등록 · 수정 · 삭제(관리자), 조회, 이미지 업로드, 엑셀 다운로드(관리자) | 삭제는 STOP 상태로 소프트 삭제, 재고는 증감값 API로 분리, 이미지는 R2, 엑셀은 청크 조회 + SXSSF로 메모리 일정 |
 | 장바구니 | 담기, 수량 변경, 삭제, 목록 | 같은 상품을 다시 담으면 수량만 증가, 결제 완료 시 주문한 상품만 삭제 |
 | 주문 | 주문서, 주문 생성, 목록, 취소 | 재고 선차감(비관적 락), 주문 당시 가격 저장, 취소 시 포트원 환불 + 재고 복구 |
 | 결제 | 결제완료, 웹훅, 만료 배치 | 포트원 재조회로 검증, 금액 불일치 자동 환불, 세 경로가 같은 동기화 규칙 사용 |
@@ -133,6 +133,7 @@ flowchart LR
 | POST · PUT · DELETE | `/api/v1/product`, `/api/v1/product/{id}` | 상품 등록 · 수정 · 삭제 | ADMIN |
 | PUT | `/api/v1/product/{id}/quantity` | 재고 증감 | ADMIN |
 | POST | `/api/v1/product/{id}/file` | 상품 이미지 업로드 | ADMIN |
+| GET | `/api/v1/product/excel` | 상품 전체 엑셀 다운로드 | ADMIN |
 | GET · POST · PUT · DELETE | `/api/v1/cart` | 장바구니 | USER, ADMIN |
 | POST | `/api/v1/order/sheet` | 주문서 | USER, ADMIN |
 | POST | `/api/v1/order` | 주문 생성 | USER, ADMIN |
@@ -344,6 +345,51 @@ public boolean canTransitTo(OrderStatusType target) {
 </details>
 
 <br>
+
+### 상품 엑셀 다운로드 메모리 개선 (청크 조회 + SXSSF)
+
+**측정 환경**
+| 항목 | 값 |
+| --- | --- |
+| 데이터 | 상품 10만 건 (설명 약 500자, 컬럼 7개) |
+| 환경 | 로컬, JVM 힙 기본값 (max 약 3.95GiB), SQL 로그 OFF |
+| 시간 | 브라우저 개발자도구 Network → Timing → Waiting for server response |
+| 메모리 | Grafana JVM 대시보드 → JVM Heap `used` 최대값 (매 측정 전 서버 재시작) |
+
+**문제**
+- `findAll()`로 상품 엔티티 10만 건(설명 TEXT 포함)을 한 번에 힙에 올림 (+ 1차 캐시, 스냅샷)
+- `XSSFWorkbook`이 셀 70만 개를 전부 메모리에 만든 뒤 한 번에 출력
+- 다운로드 1번에 힙 약 1.5GiB → 동시 요청이나 데이터 증가 시 OOM 위험
+
+**해결**
+1. **No Offset 청크 조회** : `where id > 마지막id order by id limit 1000` 으로 1,000건씩, 엔티티 대신 필요한 컬럼만 DTO로 조회
+2. **SXSSF** : 메모리에는 최근 100행만 두고 나머지는 임시 파일로 내보냄
+3. **응답** : `StreamingResponseBody`로 출력 스트림에 바로 전송 (`byte[]`로 힙에 올리지 않음)
+   - 엑셀 생성은 응답 전에 서비스에서 끝내서, 생성 중 오류는 다운로드 헤더가 정해지기 전에 정상 JSON 에러로 응답
+   - 생성 실패 시 서비스가, 전송 후에는 `finally`에서 임시 파일 정리
+4. **공통화** : `@ExcelColumn(header, order, width)` 어노테이션 + 리플렉션 → 다른 도메인도 DTO만 만들면 재사용
+5. `@Transactional` 없음 : 청크 쿼리마다 커넥션을 잠깐 쓰고 반납 (엑셀 생성 내내 커넥션을 점유하지 않음)
+
+```text
+Controller → Service : 청크 조회(1,000건) → ExcelFile.writeRows → 반복 → 완성된 ExcelFile
+           → ExcelUtils : 헤더(xlsx, 한글 파일명) + StreamingResponseBody(전송 → finally close)
+```
+
+**결과**
+| | 응답 시간 | Heap used 최대 |
+| --- | --- | --- |
+| 개선 전 (findAll + XSSF) | 23.85초 | 약 1.5GiB |
+| 개선 후 (청크 + SXSSF) | **13.90초** | **142MiB** |
+| | **약 42% 단축** | **약 91% 감소** |
+
+<table>
+  <tr>
+    <td align="center"><img width="366" height="247" alt="엑셀 다운로드(개선전) heap 메모리 사용량" src="https://github.com/user-attachments/assets/d175183a-d490-46c4-8b95-8614be9bb34a" />
+<br><b>개선 전</b></td>
+    <td align="center"><img width="361" height="255" alt="엑셀 다운로드(개선후) heap 메모리 사용량" src="https://github.com/user-attachments/assets/4a71e761-3de4-4b76-8396-8fdd73e53b36" />
+<br><b>개선 후</b></td>
+  </tr>
+</table>
 
 ## 🚨 트러블슈팅
 
