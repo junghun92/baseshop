@@ -4,6 +4,7 @@ import com.baseshop.security.filter.JWTFilter;
 import com.baseshop.security.filter.LoginFilter;
 import com.baseshop.security.handler.LoginSuccessHandler;
 import com.baseshop.security.util.JWTUtil;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -45,6 +46,10 @@ public class SecurityConfig {
 
         // 경로별 인가
         http.authorizeHttpRequests(auth -> auth
+                        // 비동기 전송 후 재디스패치(ASYNC), 에러 디스패치(ERROR)는 권한 재검사 안 함
+                        // 첫 요청(REQUEST)에서 이미 권한 검사를 통과한 요청이라 안전
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
+
                         // health, info, prometheus는 인증 없이 (외부 차단은 nginx가 담당)
                         .requestMatchers("/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
                         // 나머지 액추에이터는 전부 차단
