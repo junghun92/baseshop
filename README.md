@@ -1,27 +1,21 @@
 # baseshop
 
-Spring Boot + JPA 기반 쇼핑몰 백엔드 프로젝트입니다.
-회원, 게시판, 상품, 장바구니, 주문, 결제 API를 만들고, **홈서버에 직접 Docker 환경을 구축해 HTTPS와 CI/CD까지 운영**하고 있습니다.
-결제는 **포트원(PortOne) V2**를 연동해 결제 검증, 웹훅 동기화, 환불까지 처리했고, 재고와 결제 상태의 **동시성·정합성**에 가장 많이 신경 썼습니다.
+Spring Boot + JPA 기반 쇼핑몰 백엔드입니다.
+**홈서버에 Docker 환경을 직접 구축해 HTTPS · CI/CD · 모니터링까지 운영**하고 있고, 포트원(PortOne) V2 결제의 **동시성 · 정합성**과 **대용량 데이터 조회 성능**에 집중했습니다.
 
 - 🚀 서비스 : https://baseshop.co.kr
-- 📄 API 문서 (Swagger) : https://baseshop.co.kr/swagger-ui/index.html
+- 📄 API 문서 : https://baseshop.co.kr/swagger-ui/index.html
 
 <br>
 
-## 📌 목차
+## 📈 핵심 성과
 
-1. [기술 스택](#-기술-스택)
-2. [아키텍처](#-아키텍처)
-3. [ERD](#-erd)
-4. [주요 기능](#-주요-기능)
-5. [주문 · 결제 설계](#-주문--결제-설계)
-6. [그 밖의 설계](#-그-밖의-설계)
-7. [트러블슈팅](#-트러블슈팅)
-8. [테스트](#-테스트)
-9. [패키지 구조](#-패키지-구조)
-10. [로컬 실행](#-로컬-실행)
-11. [한계와 개선 계획](#-한계와-개선-계획)
+| 주제 | 내용 | 결과 |
+| --- | --- | --- |
+| 대용량 페이징 | 게시글 100만 건, 뒤 페이지 조회를 커버링 인덱스(지연 조인)로 개선 | **9,427ms → 102ms** |
+| 대용량 엑셀 | 상품 10만 건 다운로드를 No Offset 청크 + SXSSF + 스트리밍으로 개선 | **힙 1.5GiB → 142MiB** |
+| 결제 정합성 | 결제완료 · 웹훅 · 만료 배치가 같은 동기화 규칙, 비관적 락 + 상태 전이 규칙 | 중복 처리 · 재고 이중 복구 차단 |
+| 인프라 · 운영 | 홈서버 Ubuntu + Docker Compose, GitHub Actions 자동 배포, Prometheus · Grafana · Slack 알림 | 외부 공개 포트 80/443만 |
 
 <br>
 
@@ -29,81 +23,57 @@ Spring Boot + JPA 기반 쇼핑몰 백엔드 프로젝트입니다.
 
 | 구분 | 기술 |
 | --- | --- |
-| Backend | Java 17, Spring Boot 4.1, Spring Data JPA, QueryDSL 5, Spring Security, JWT(jjwt 0.13), Bean Validation, springdoc-openapi |
+| Backend | Java 17, Spring Boot 4.1, Spring Data JPA, QueryDSL 5, Spring Security, JWT, Apache POI (SXSSF) |
 | Database | MySQL 8.4, Redis 7 |
-| Monitoring | Spring Boot Actuator, Micrometer, Prometheus, Grafana, Slack 알림
-| Access | Cloudflare Tunnel + Cloudflare Access (Zero Trust, 모니터링 도구 접근)
-| 외부 연동 | PortOne V2 (결제 조회 · 취소 · 웹훅), Cloudflare R2 (상품 이미지, AWS SDK v2 S3 호환) |
-| Infra | Ubuntu Server 24.04 (홈서버), Docker, Docker Compose, Nginx |
-| CI/CD | GitHub Actions, GHCR (GitHub Container Registry) |
-| 도메인 / 보안 | Cloudflare DNS, Let's Encrypt (certbot, DNS-01), DDNS, UFW, fail2ban |
+| Infra | Ubuntu Server 24.04 (홈서버), Docker Compose, Nginx, GitHub Actions, GHCR |
+| Monitoring | Actuator, Micrometer, Prometheus, Grafana, Slack 알림, Cloudflare Tunnel + Access |
+| 외부 연동 | PortOne V2 (결제 · 환불 · 웹훅), Cloudflare R2 (상품 이미지) |
 | Frontend | Vue 3 + Vite (연동 확인용) |
 
 <br>
 
 ## 🏗 아키텍처
 
-### 서버 구성
-
 ```mermaid
 flowchart LR
-    U["사용자 브라우저"] -->|"HTTPS"| CF["Cloudflare DNS"]
+    U["사용자"] -->|"HTTPS"| CF["Cloudflare DNS"]
     PO["포트원 웹훅"] -->|"HTTPS"| CF
     CF --> N
-    ADM["관리자"] -->|"HTTPS<br>grafana.baseshop.co.kr"| ACC["Cloudflare Access<br>허용 계정만 통과"]
+    ADM["관리자"] -->|"HTTPS"| ACC["Cloudflare Access<br>허용 계정만"]
     ACC --> TUN["Cloudflare Tunnel"]
-    subgraph S["홈서버 (Ubuntu 24.04, UFW: 80/443/SSH만 개방)"]
+    subgraph S["홈서버 (Ubuntu 24.04, UFW: 80/443/SSH)"]
         subgraph D["Docker Compose 내부 네트워크"]
-            N["Nginx<br>80 → 443 리다이렉트<br>HTTPS · Vue 정적 파일 · /api 프록시"]
-            SP["Spring Boot<br>(외부 비공개)"]
-            DB[("MySQL<br>(서버 로컬만 접근)")]
-            RD[("Redis<br>Refresh Token<br>(외부 비공개)")]
-            C["certbot<br>인증서 발급 · 갱신"]
-            DD["cloudflare-ddns<br>IP 변경 감지"]
-            PR["Prometheus<br>메트릭 수집 · 저장"]
-            GF["Grafana<br>대시보드 · 알림"]
-            CFD["cloudflared<br>터널 연결"]
+            N["Nginx<br>HTTPS · 정적 파일 · /api 프록시"]
+            SP["Spring Boot"]
+            DB[("MySQL")]
+            RD[("Redis<br>Refresh Token")]
+            PR["Prometheus"]
+            GF["Grafana"]
+            CFD["cloudflared"]
         end
     end
     N -->|"/api/**"| SP
     SP --> DB
     SP --> RD
-    PR -->|"/actuator/prometheus<br>15초마다 수집"| SP
-    GF -->|"조회"| PR
-    CFD -.->|"서버에서 먼저 연결"| TUN
-    TUN -->|"요청 전달"| CFD
-    CFD --> GF
+    PR -->|"15초마다 수집"| SP
+    GF --> PR
+    TUN --> CFD --> GF
     GF -->|"서버 다운 알림"| SL["Slack"]
-    SP -->|"결제 조회 · 취소"| PG["PortOne API"]
-    SP -->|"이미지 업로드"| R2["Cloudflare R2"]
+    SP -->|"결제 조회 · 취소"| PG["PortOne"]
+    SP -->|"이미지"| R2["Cloudflare R2"]
 ```
 
-- 클라우드 대신 **집 데스크탑에 Ubuntu Server를 설치**하고, Nginx · Spring · MySQL · Redis를 컨테이너로 운영합니다.
-- 외부에 열린 포트는 **Nginx 80/443 뿐**입니다. Spring, Redis는 호스트 포트를 열지 않고 Docker 내부 네트워크에서만 통신하며, MySQL은 서버 로컬(127.0.0.1)에서만 접근할 수 있습니다.
-- 프론트와 API를 같은 도메인(`/api`)으로 묶어 CORS 없이 동작합니다.
-- 유동 IP는 DDNS 컨테이너가 감지해 Cloudflare DNS 레코드를 자동으로 수정합니다.
-- **모니터링** : Prometheus가 Spring의 메트릭을 수집하고 Grafana로 대시보드와 Slack 알림을 구성했습니다. 두 도구 모두 포트를 열지 않고, Grafana는 **Cloudflare Tunnel + Access**로 허용된 계정만 접근합니다.
+- 외부에 열린 포트는 **Nginx 80/443뿐**이고, Spring · MySQL · Redis · 모니터링 도구는 내부 네트워크에서만 통신합니다.
+- Grafana는 포트를 열지 않고 **Cloudflare Tunnel + Access**로 허용된 계정만 접근합니다.
+- **CI/CD** : `git push` → GitHub Actions에서 이미지 빌드 → GHCR → SSH로 서버에서 `compose pull → up -d`. 비밀 설정은 GitHub Secret으로 배포 때 주입합니다.
+- 인증서(Let's Encrypt)와 유동 IP(DDNS)도 컨테이너로 자동 갱신합니다.
 
-### CI/CD
-
-```mermaid
-flowchart LR
-    DEV["git push (master)"] --> GA["GitHub Actions<br>Docker 이미지 빌드<br>(멀티스테이지)"]
-    GA -->|"latest + 커밋 SHA 태그"| REG[("GHCR")]
-    GA -->|"SSH 키 인증"| SV["홈서버<br>설정 파일 생성(Secret)<br>compose pull → up -d"]
-    REG --> SV
-```
-
-- 빌드는 Actions에서 하고 서버는 이미지만 받아서 교체합니다. 운영 서버에 빌드 부하가 없습니다.
-- `application-prod.properties`는 git에 없고, GitHub Secret으로 배포 때 서버에 파일로 만들어 읽기 전용 볼륨으로 주입합니다.
-- 저장소는 3개로 나눴습니다: `baseshop`(백엔드), `baseshop-front`(프론트), `baseshop-deploy`(compose · 스크립트).
-
-<br>
-
-## 🗂 ERD
+<details>
+<summary><b>ERD</b></summary>
 
 <img width="1397" height="803" alt="ERD" src="https://github.com/user-attachments/assets/f0e5a5c4-2c9b-403b-9a11-21c4e138a365" />
 
+</details>
 
 <br>
 
@@ -111,12 +81,11 @@ flowchart LR
 
 | 도메인 | 기능 | 포인트 |
 | --- | --- | --- |
-| 회원 · 인증 | 회원가입, 로그인, 로그아웃, 토큰 재발급 | Access / Refresh 분리, Refresh는 httpOnly 쿠키 + Redis 저장(회원당 1개, TTL 자동 만료) |
-| 게시판 | CRUD, 페이징 · 검색 | 작성자 본인만 수정 · 삭제 (소유권 검증 → 403) |
-| 상품 | 등록 · 수정 · 삭제(관리자), 조회, 이미지 업로드, 엑셀 다운로드(관리자) | 삭제는 STOP 상태로 소프트 삭제, 재고는 증감값 API로 분리, 이미지는 R2, 엑셀은 청크 조회 + SXSSF로 메모리 일정 |
-| 장바구니 | 담기, 수량 변경, 삭제, 목록 | 같은 상품을 다시 담으면 수량만 증가, 결제 완료 시 주문한 상품만 삭제 |
-| 주문 | 주문서, 주문 생성, 목록, 취소 | 재고 선차감(비관적 락), 주문 당시 가격 저장, 취소 시 포트원 환불 + 재고 복구 |
-| 결제 | 결제완료, 웹훅, 만료 배치 | 포트원 재조회로 검증, 금액 불일치 자동 환불, 세 경로가 같은 동기화 규칙 사용 |
+| 회원 · 인증 | 가입, 로그인, 로그아웃, 재발급 | Access / Refresh 분리, Refresh는 httpOnly 쿠키 + Redis(TTL) |
+| 게시판 | CRUD, 페이징 · 검색 | 작성자 본인만 수정 · 삭제, 100만 건 페이징 최적화 |
+| 상품 | 관리(관리자), 조회, 이미지, 엑셀 다운로드 | 소프트 삭제, 이미지는 R2, 엑셀은 메모리 일정 |
+| 장바구니 · 주문 | 담기, 주문 생성 · 취소 | 재고 선차감(비관적 락), 취소 시 환불 + 재고 복구 |
+| 결제 | 결제완료, 웹훅, 만료 배치 | 포트원 재조회로 검증, 금액 불일치 자동 환불 |
 
 <details>
 <summary><b>API 목록</b></summary>
@@ -124,9 +93,7 @@ flowchart LR
 | Method | URI | 설명 | 권한 |
 | --- | --- | --- | --- |
 | POST | `/api/v1/member` | 회원가입 | 누구나 |
-| POST | `/api/v1/login` | 로그인 | 누구나 |
-| POST | `/api/v1/logout` | 로그아웃 | 누구나 |
-| POST | `/api/v1/reissue` | Access Token 재발급 | 누구나 (Refresh 쿠키) |
+| POST | `/api/v1/login` · `/logout` · `/reissue` | 로그인 · 로그아웃 · 재발급 | 누구나 |
 | GET | `/api/v1/board`, `/api/v1/board/{id}` | 게시글 목록 · 상세 | 누구나 |
 | POST · PUT · DELETE | `/api/v1/board`, `/api/v1/board/{id}` | 게시글 작성 · 수정 · 삭제 | USER, ADMIN |
 | GET | `/api/v1/product`, `/api/v1/product/{id}` | 상품 목록 · 상세 | 누구나 |
@@ -135,8 +102,7 @@ flowchart LR
 | POST | `/api/v1/product/{id}/file` | 상품 이미지 업로드 | ADMIN |
 | GET | `/api/v1/product/excel` | 상품 전체 엑셀 다운로드 | ADMIN |
 | GET · POST · PUT · DELETE | `/api/v1/cart` | 장바구니 | USER, ADMIN |
-| POST | `/api/v1/order/sheet` | 주문서 | USER, ADMIN |
-| POST | `/api/v1/order` | 주문 생성 | USER, ADMIN |
+| POST | `/api/v1/order/sheet`, `/api/v1/order` | 주문서, 주문 생성 | USER, ADMIN |
 | GET | `/api/v1/order` | 주문 목록 | USER, ADMIN |
 | PUT | `/api/v1/order/{id}/cancel` | 주문 취소 | USER, ADMIN |
 | POST | `/api/v1/payment/complete` | 결제완료 검증 | USER, ADMIN |
@@ -146,9 +112,80 @@ flowchart LR
 
 <br>
 
-## 💳 주문 · 결제 설계
+## ⚡ 성능 개선
 
-### 결제 흐름
+### 1. 게시판 페이징 : 커버링 인덱스 (9,427ms → 102ms)
+
+**문제** : 게시글 100만 건에서 뒤 페이지(`LIMIT 300000, 10`) 조회가 9초 이상
+- `board_type` 인덱스가 없어 테이블을 90만 행 읽으며 필터링
+- offset만큼 건너뛸 행까지 전부 테이블에서 읽고 버림
+
+**해결**
+1. `board_type` 인덱스 추가 (보조 인덱스에 PK가 포함돼 정렬까지 인덱스로 처리)
+2. 인덱스만으로 id 10개 조회 → 그 id로 본 데이터 조회 (지연 조인)
+   - QueryDSL은 FROM 서브쿼리를 지원하지 않아 쿼리 2번으로 구현, 반환 타입은 유지해서 서비스 · 프론트 변경 없음
+
+| | 테이블 접근 | 실행 시간 |
+| --- | --- | --- |
+| 개선 전 | 90만 회 | 9,427ms |
+| 개선 후 | **10회** | **102ms (약 92배)** |
+
+<details>
+<summary>측정 환경 · EXPLAIN ANALYZE</summary>
+
+- 게시글 100만 건 (QNA 약 33만 건), 테이블 884MB / 인덱스 23MB, InnoDB 버퍼 풀 128MB
+- `EXPLAIN ANALYZE`, 3회 실행 후 첫 회 제외
+
+**개선 전** — 9,427ms
+```
+-> Limit/Offset: 10/300000 row(s)  (actual time=9427..9427 rows=10 loops=1)
+    -> Filter: (b1_0.board_type = 'QNA')  (actual time=0.0573..9405 rows=300010 loops=1)
+        -> Index scan on b1_0 using PRIMARY (reverse)  (actual time=0.052..9308 rows=900030 loops=1)
+```
+
+**개선 후** — 102ms
+```
+-> Nested loop inner join  (actual time=102..102 rows=10 loops=1)
+    -> Table scan on t  (actual time=98.5..98.5 rows=10 loops=1)
+        -> Materialize  (actual time=98.4..98.4 rows=10 loops=1)
+            -> Limit/Offset: 10/300000 row(s)  (actual time=98.1..98.1 rows=10 loops=1)
+                -> Covering index lookup on b1_0 using idx_board_board_type (board_type = 'QNA') (reverse)  (actual time=0.147..87.5 rows=300010 loops=1)
+    -> Single-row index lookup on b using PRIMARY (board_id = t.board_id)  (actual time=0.00429..0.00432 rows=1 loops=10)
+```
+</details>
+
+### 2. 상품 엑셀 다운로드 : 메모리 개선 (힙 1.5GiB → 142MiB)
+
+**문제** : `findAll()` + `XSSFWorkbook`으로 상품 10만 건과 엑셀 셀 70만 개를 전부 힙에 올림 → 동시 요청 시 OOM 위험
+
+**해결**
+1. **No Offset 청크 조회** : `where id > 마지막id limit 1000`으로 1,000건씩, 필요한 컬럼만 DTO로
+2. **SXSSF** : 메모리에는 최근 100행만, 나머지는 임시 파일
+3. **StreamingResponseBody** : 출력 스트림에 바로 전송 (`byte[]`로 힙에 올리지 않음). 생성은 응답 전에 끝내서 오류는 정상 JSON 에러로 응답
+4. **공통화** : `@ExcelColumn` 어노테이션 + 리플렉션 → 다른 도메인도 DTO만 만들면 재사용
+
+| | 응답 시간 | Heap used 최대 |
+| --- | --- | --- |
+| 개선 전 | 23.85초 | 약 1.5GiB |
+| 개선 후 | **13.90초 (42%↓)** | **142MiB (91%↓)** |
+
+<table>
+  <tr>
+    <td align="center"><img width="366" height="247" alt="엑셀 다운로드(개선전) heap 메모리 사용량" src="https://github.com/user-attachments/assets/d175183a-d490-46c4-8b95-8614be9bb34a" /><br><b>개선 전</b></td>
+    <td align="center"><img width="361" height="255" alt="엑셀 다운로드(개선후) heap 메모리 사용량" src="https://github.com/user-attachments/assets/4a71e761-3de4-4b76-8396-8fdd73e53b36" /><br><b>개선 후</b></td>
+  </tr>
+</table>
+
+<details>
+<summary>측정 환경</summary>
+
+- 상품 10만 건 (설명 약 500자, 컬럼 7개), 로컬, JVM 힙 기본값, SQL 로그 OFF
+- 시간 : 브라우저 Network → Waiting for server response / 메모리 : Grafana JVM Heap `used` 최대값 (측정마다 서버 재시작)
+</details>
+
+<br>
+
+## 💳 주문 · 결제 설계
 
 ```mermaid
 sequenceDiagram
@@ -157,337 +194,56 @@ sequenceDiagram
     participant P as 포트원
     F->>S: 주문 생성
     Note over S: 상품 락 → 재고 차감 → 주문 PENDING, 결제 READY
-    S-->>F: portonePaymentId, 금액
     F->>P: 결제창 (SDK)
-    P-->>F: 결제 결과
     F->>S: 결제완료 (/complete)
-    P->>S: 웹훅 (Paid / Failed / Cancelled)
+    P->>S: 웹훅
     Note over S: 둘 다 포트원에 다시 조회 → 같은 동기화 규칙
-    S->>P: 결제 조회
     Note over S: 결제 행 락 → 상태 재확인 → 반영
 ```
 
-- 프론트에서 받은 결과와 웹훅 body는 믿지 않고, **항상 포트원에 다시 조회**해서 상태와 금액을 확인합니다.
-- 웹훅이 `/complete`보다 먼저 오는 경우가 많아서, 두 경로가 **같은 동기화 메서드**를 사용합니다.
-- 결제창만 열고 닫은 주문은 **만료 배치**(5분마다, 10분 지난 READY)가 정리합니다.
+- **검증** : 프론트 결과와 웹훅 body는 믿지 않고 항상 포트원에 다시 조회해 상태와 금액 확인, 금액이 다르면 자동 환불
+- **같은 동기화 규칙** : 결제완료 · 웹훅 · 만료 배치(10분 지난 READY)가 같은 메서드를 사용 → 어느 경로로 먼저 와도 결과가 같음
+- **동시성** : 재고는 상품 ID 순서로 비관적 락(데드락 방지), 결제는 행 락 + 락 안에서 상태 재확인 → 먼저 락을 잡은 쪽만 반영
+- **상태 전이 규칙** : 상태는 엔티티의 `transitTo()`에서만 바뀌고 허용되지 않은 전이는 예외 → 중복 완료 · 중복 취소(재고 이중 복구) 차단
+- **Facade + Processor** : 서비스는 자기 도메인만, 여러 도메인 변경은 Processor 한 트랜잭션, **외부 API(포트원)는 트랜잭션 밖**에서 호출해 락과 커넥션을 오래 잡지 않음
 
-### 동기화 규칙
+| 동시성 테스트 | 결과 |
+| --- | --- |
+| 재고 100개 상품에 100건 동시 주문 | 재고 정확히 0 |
+| 재고 10개 상품에 30건 동시 주문 | 10건 성공, 20건 실패, 재고 음수 없음 |
+
+<details>
+<summary><b>동기화 규칙 · 복구 시나리오</b></summary>
 
 | DB 결제 상태 | 포트원 상태 | 처리 |
 | --- | --- | --- |
 | READY | PAID (금액 일치) | 결제완료 → 주문완료 → 장바구니 삭제 |
 | READY | PAID (금액 불일치) | 포트원 환불 → 결제취소 → 주문실패 → 재고복구 |
 | READY | FAILED | 결제실패 → 주문실패 → 재고복구 |
-| READY | CANCELLED | 결제취소 → 주문실패 → 재고복구 (환불 후 DB 반영 실패 복구) |
-| READY | 결제 진행 중 | 변화 없음 (결과가 나오면 웹훅이 처리) |
+| READY | CANCELLED | 결제취소 → 주문실패 → 재고복구 |
 | PAID | CANCELLED | 결제취소 → 주문취소 → 재고복구 (콘솔 취소 등) |
-| FAILED / CANCELLED | - | 변화 없음 (끝난 결제) |
-
-### Facade + Processor
-
-처음에는 주문 서비스가 결제 · 상품 서비스를 부르고, 결제 서비스가 상품 · 장바구니 · 포트원까지 의존해서 서비스끼리 얽혀 있었습니다.
-또 결제 행 락을 잡은 채로 포트원 환불(HTTP)을 호출하고 있었습니다. 그래서 계층을 다음과 같이 나눴습니다.
-
-```text
-Controller
- ├─ 한 도메인만 (주문 목록 등)        → Service
- └─ 여러 도메인 조합                 → Facade      : 조합, 포트원 호출 (트랜잭션 밖)
-                                       └─ Processor : 여러 도메인 변경을 한 트랜잭션으로
-                                             └─ Service (자기 도메인만) / Entity (상태 규칙)
-```
-
-- **Service는 자기 도메인만** 다루고 서로 의존하지 않습니다.
-- **외부 API는 트랜잭션 밖**에서 호출해, 응답이 느려도 DB 락과 커넥션을 오래 잡지 않습니다.
-  - 예외: 금액 불일치 환불은 거의 일어나지 않는 경우라 단순하게 트랜잭션 안에서 처리했습니다.
-- Processor를 별도 빈으로 둔 이유는 같은 클래스 안에서 `@Transactional` 메서드를 부르면 프록시를 거치지 않아 트랜잭션이 걸리지 않기 때문입니다.
-- 락 조회처럼 호출하는 쪽 트랜잭션 안에서만 의미 있는 메서드는 `Propagation.MANDATORY`로 실수를 막았습니다.
-
-### 상태 전이 규칙
-
-```java
-// OrderStatusType
-public boolean canTransitTo(OrderStatusType target) {
-    return switch (this) {
-        case PENDING -> target == COMPLETED || target == FAILED;
-        case COMPLETED -> target == CANCELLED;
-        case CANCELLED, FAILED -> false;
-    };
-}
-```
-
-- 상태는 엔티티의 `transitTo()` 한 곳에서만 바뀌고, 허용되지 않은 전이는 예외로 막습니다. → 중복 완료, 중복 취소(재고 이중 복구) 차단
-- Order는 상태만 바뀌어서 `transitTo(상태)`, Payment는 결제일 · 사유 같은 값도 같이 저장해서 `complete()` · `fail()` · `cancel()` + private `transitTo`로 나눴습니다.
-- 주문 실패(FAILED, 시스템이 처리)와 주문 취소(CANCELLED, 사람이 취소)를 구분합니다.
-
-### 동시성과 멱등성
-
-| 대상 | 방법 |
-| --- | --- |
-| 재고 차감 | `where id in (...) order by id for update` 한 번으로 상품 락 → 항상 같은 순서라 데드락 방지 |
-| 재고 복구 | 상품 ID 순서로 락 (차감과 같은 순서) |
-| 결제 상태 변경 | 결제 행 비관적 락 + 락 안에서 상태 재확인 |
-
-| 같은 요청이 여러 번 오면 | 결과 |
-| --- | --- |
-| 결제완료 새로고침 · 재요청 | 끝난 결제는 저장된 결과를 그대로 반환 |
-| 웹훅 재전송 (최대 5회) | 끝난 결제는 동기화 전에 종료 |
-| 결제완료와 웹훅 동시 도착 | 먼저 락을 잡은 쪽만 반영 |
-| 만료 배치와 웹훅 동시 | 락 안에서 READY 재확인 |
-
-### 외부 결제와 DB가 어긋나는 경우
+| FAILED / CANCELLED | - | 변화 없음 |
 
 | 상황 | 복구 |
 | --- | --- |
-| 주문취소 환불은 됐는데 DB 반영 실패 | 웹훅(DB PAID + 포트원 CANCELLED)이 동기화 |
-| 금액 불일치 환불 후 DB 반영 실패 | 웹훅(DB READY + 포트원 CANCELLED)이 동기화 |
-| 금액 불일치 환불 실패 | 롤백 → READY 유지 → 다음 웹훅에서 재시도 |
+| 환불은 됐는데 DB 반영 실패 | 웹훅이 포트원 상태로 동기화 |
 | 웹훅이 끝내 안 옴 | 만료 배치가 포트원을 확인해서 동기화 |
 | 결제창만 열고 닫음 | 만료 배치가 결제실패 · 주문실패 · 재고복구 |
 
-<br>
-
-## 🧩 그 밖의 설계
-
-<details>
-<summary><b>인증 (JWT Access + Refresh)</b></summary>
-
-- 로그인은 JSON 기반 커스텀 `LoginFilter`, 이후 요청은 `JWTFilter`가 서명 · 만료 · 토큰 종류를 검증합니다.
-- Access Token은 짧게 Authorization 헤더로, Refresh Token은 httpOnly · SameSite=Lax · Secure 쿠키로 내려주고 Redis에 회원당 1개만 저장합니다.
-- 재발급 시 쿠키의 Refresh Token과 Redis에 저장된 값을 비교해 일치할 때만 새 Access Token을 발급합니다.
-- 로그아웃 시 쿠키의 Refresh Token에서 사용자를 꺼내 Redis 키를 삭제해 재발급을 차단합니다.
-
-</details>
-
-<details>
-<summary><b>권한 2단계</b></summary>
-
-- URL 단위 권한은 Spring Security (`authorizeHttpRequests`), 데이터 단위 권한(내 글인지, 내 주문인지)은 서비스나 쿼리 조건에서 확인합니다.
-- 결제완료에서 남의 결제를 요청하면, 존재 여부를 알려주지 않도록 없는 결제와 같은 404를 줍니다.
-
-</details>
-
-<details>
-<summary><b>파일 업로드 (Cloudflare R2)</b></summary>
-
-- 저장소를 `FileStore` 인터페이스로 추상화하고 `LocalFileStore`, `R2FileStore`를 `@Profile`로 환경마다 하나만 등록합니다.
-- DB에는 상대경로만 저장해서 저장소를 바꿔도 DB 값은 그대로입니다.
-- 파일 저장 후 DB 저장(`saveAndFlush`)이 실패하면 방금 저장한 파일을 지웁니다 (보상 삭제).
-- 이미지 교체 시 기존 파일은 `del_yn`으로 표시만 하고, 매일 새벽 배치가 7일 지난 파일을 정리합니다.
-- 확장자 화이트리스트 + Content-Type 검사, 5MB 제한.
-
-</details>
-
-<details>
-<summary><b>조회 성능</b></summary>
-
-- 연관관계는 LAZY, ToOne은 fetch join, ToMany는 `default_batch_fetch_size`로 IN 쿼리 묶음.
-- OSIV를 끄고, 트랜잭션 밖(Facade)에서 쓰는 연관 엔티티는 fetch join으로 미리 로딩합니다.
-- QueryDSL 동적 쿼리에서 "내 주문만" 같은 필수 조건은 null이 되지 않게 분리했습니다.
-
-</details>
-
-<details>
-<summary><b>예외 응답 통일</b></summary>
-
-- `@RestControllerAdvice` + 공통 응답 `ApiResponse`로 모든 응답 형식을 맞췄습니다.
-- 잘못된 파라미터, 없는 경로, 지원하지 않는 메서드가 500으로 나가던 것을 400 · 404 · 405로 구분했습니다.
-
-</details>
-
-### 게시판 목록 조회 성능 개선 (커버링 인덱스)
-
-**측정 환경**
-| 항목 | 값 |
-| --- | --- |
-| 데이터 | 게시글 100만 건 (QNA 약 33만 건) |
-| 테이블 / 인덱스 크기 | 884MB / 23MB |
-| InnoDB 버퍼 풀 | 128MB (데이터가 메모리보다 큼) |
-| 쿼리 | `board_type = 'QNA'` 최신순, `LIMIT 300000, 10` (3만 번째 페이지) |
-| 측정 | `EXPLAIN ANALYZE`, 3회 실행 후 첫 회 제외 |
-
-**문제**
-- 데이터가 늘자 뒤 페이지 조회가 9초 이상 걸림
-- `board_type` 인덱스가 없어 PK(테이블)를 역순으로 90만 행 읽으면서 QNA만 걸러냄
-- `SELECT *` + offset 이라 건너뛸 30만 행까지 전부 테이블에서 읽고 버림
-
-**해결**
-1. `board_type` 인덱스 추가 (InnoDB 보조 인덱스에 PK가 포함돼 `board_id` 정렬까지 인덱스로 처리)
-2. 커버링 인덱스로 id 만 먼저 조회 → 해당 id 10건만 실제 데이터 조회 (지연 조인)
-   - QueryDSL 은 FROM 서브쿼리를 지원하지 않아 쿼리 2번(id 조회 → `where id in`)으로 구현
-   - 반환 타입(`Page<Board>`)은 그대로 유지해 서비스 · 프론트 변경 없음
-
-**결과**
-| | 접근 방식 | 테이블 접근 | 실행 시간 |
-| --- | --- | --- | --- |
-| 개선 전 | PK 역순 스캔 + 필터 (90만 행) | 90만 회 | **9,427ms** |
-| 개선 후 | 커버링 인덱스 (30만 행) + PK 조회 | **10회** | **102ms** |
-| | | | **약 92배 (98.9%) 단축** |
-
-<details>
-<summary>EXPLAIN ANALYZE 원문</summary>
-
-**개선 전** — 9,427ms
-```
--> Limit/Offset: 10/300000 row(s)  (actual time=9427..9427 rows=10 loops=1)        ← 전체 9.4초
-    -> Filter: (b1_0.board_type = 'QNA')  (actual time=0.0573..9405 rows=300010 loops=1)
-        -> Index scan on b1_0 using PRIMARY (reverse)  (actual time=0.052..9308 rows=900030 loops=1)   ← 테이블 90만 행
-```
-
-**개선 후** — 102ms
-```
--> Nested loop inner join  (actual time=102..102 rows=10 loops=1)                   ← 전체 0.1초
-    -> Table scan on t  (actual time=98.5..98.5 rows=10 loops=1)
-        -> Materialize  (actual time=98.4..98.4 rows=10 loops=1)
-            -> Limit/Offset: 10/300000 row(s)  (actual time=98.1..98.1 rows=10 loops=1)
-                -> Covering index lookup on b1_0 using idx_board_board_type (board_type = 'QNA') (reverse)  (actual time=0.147..87.5 rows=300010 loops=1)   ← 인덱스만
-    -> Single-row index lookup on b using PRIMARY (board_id = t.board_id)  (actual time=0.00429..0.00432 rows=1 loops=10)   ← 테이블 10번
-```
 </details>
 
 <br>
-
-### 상품 엑셀 다운로드 메모리 개선 (청크 조회 + SXSSF)
-
-**측정 환경**
-| 항목 | 값 |
-| --- | --- |
-| 데이터 | 상품 10만 건 (설명 약 500자, 컬럼 7개) |
-| 환경 | 로컬, JVM 힙 기본값 (max 약 3.95GiB), SQL 로그 OFF |
-| 시간 | 브라우저 개발자도구 Network → Timing → Waiting for server response |
-| 메모리 | Grafana JVM 대시보드 → JVM Heap `used` 최대값 (매 측정 전 서버 재시작) |
-
-**문제**
-- `findAll()`로 상품 엔티티 10만 건(설명 TEXT 포함)을 한 번에 힙에 올림 (+ 1차 캐시, 스냅샷)
-- `XSSFWorkbook`이 셀 70만 개를 전부 메모리에 만든 뒤 한 번에 출력
-- 다운로드 1번에 힙 약 1.5GiB → 동시 요청이나 데이터 증가 시 OOM 위험
-
-**해결**
-1. **No Offset 청크 조회** : `where id > 마지막id order by id limit 1000` 으로 1,000건씩, 엔티티 대신 필요한 컬럼만 DTO로 조회
-2. **SXSSF** : 메모리에는 최근 100행만 두고 나머지는 임시 파일로 내보냄
-3. **응답** : `StreamingResponseBody`로 출력 스트림에 바로 전송 (`byte[]`로 힙에 올리지 않음)
-   - 엑셀 생성은 응답 전에 서비스에서 끝내서, 생성 중 오류는 다운로드 헤더가 정해지기 전에 정상 JSON 에러로 응답
-   - 생성 실패 시 서비스가, 전송 후에는 `finally`에서 임시 파일 정리
-4. **공통화** : `@ExcelColumn(header, order, width)` 어노테이션 + 리플렉션 → 다른 도메인도 DTO만 만들면 재사용
-5. `@Transactional` 없음 : 청크 쿼리마다 커넥션을 잠깐 쓰고 반납 (엑셀 생성 내내 커넥션을 점유하지 않음)
-
-```text
-Controller → Service : 청크 조회(1,000건) → ExcelFile.writeRows → 반복 → 완성된 ExcelFile
-           → ExcelUtils : 헤더(xlsx, 한글 파일명) + StreamingResponseBody(전송 → finally close)
-```
-
-**결과**
-| | 응답 시간 | Heap used 최대 |
-| --- | --- | --- |
-| 개선 전 (findAll + XSSF) | 23.85초 | 약 1.5GiB |
-| 개선 후 (청크 + SXSSF) | **13.90초** | **142MiB** |
-| | **약 42% 단축** | **약 91% 감소** |
-
-<table>
-  <tr>
-    <td align="center"><img width="366" height="247" alt="엑셀 다운로드(개선전) heap 메모리 사용량" src="https://github.com/user-attachments/assets/d175183a-d490-46c4-8b95-8614be9bb34a" />
-<br><b>개선 전</b></td>
-    <td align="center"><img width="361" height="255" alt="엑셀 다운로드(개선후) heap 메모리 사용량" src="https://github.com/user-attachments/assets/4a71e761-3de4-4b76-8396-8fdd73e53b36" />
-<br><b>개선 후</b></td>
-  </tr>
-</table>
 
 ## 🚨 트러블슈팅
 
 | 문제 | 원인 | 해결 |
 | --- | --- | --- |
-| 웹훅 `type`이 null | 포트원 콘솔 웹훅 버전이 2024-01-01 (type, data가 없는 형식) | 웹훅 버전을 2024-04-25로 변경 |
-| 결제 취소 성공인데 실패로 처리 | 취소 상태가 enum인데 문자열과 `equals` 비교 → 항상 false | enum은 `==`로 비교 |
-| 환불은 됐는데 DB는 결제완료 | 환불 후 DB 반영 중 예외 → 롤백 | 웹훅이 포트원 상태로 동기화하도록 규칙 추가 |
-| 서비스끼리 얽히고 락 잡은 채 외부 API 호출 | 주문 · 결제 서비스가 서로 의존, 트랜잭션 안에서 포트원 호출 | Facade + Processor로 분리, 외부 호출은 트랜잭션 밖 |
-| 동시 주문 시 재고가 맞지 않음 | 같은 재고를 읽고 각자 차감 (갱신 손실) | 비관적 락 + 상품 ID 순서로 락 |
-| Spring이 DB 연결 실패 | MySQL 초기화 전에 Spring이 먼저 접속 | MySQL healthcheck + `depends_on: service_healthy` |
+| 동시 주문 시 재고 불일치 | 같은 재고를 읽고 각자 차감 (갱신 손실) | 비관적 락 + 상품 ID 순서로 락 |
+| 환불은 됐는데 DB는 결제완료 | 환불 후 DB 반영 중 예외 → 롤백 | 웹훅이 포트원 상태로 동기화하는 규칙 추가 |
+| 결제 취소 성공인데 실패로 처리 | enum과 문자열을 `equals` 비교 → 항상 false | enum은 `==`로 비교 |
 | 배포 후 POST만 403 | Nginx가 Host 헤더를 바꿔 전달 → 다른 출처로 판단 | `proxy_set_header Host $http_host` |
-| R2 업로드 403 | R2가 chunked encoding을 지원하지 않음 | `chunkedEncodingEnabled(false)` |
-| 게시판 뒤 페이지 조회 9초 | `board_type` 인덱스 없음 + offset 만큼 테이블을 읽고 버림 | 인덱스 추가 + 커버링 인덱스(지연 조인) → 102ms |
-
-<br>
-
-## 🧪 테스트
-
-| 테스트 | 결과 |
-| --- | --- |
-| 재고 100개 상품에 100건 동시 주문 | 재고 정확히 0 |
-| 재고 10개 상품에 30건 동시 주문 | 10건 성공, 20건 실패, 재고 0 (음수 없음) |
-
-- `src/test/java/com/baseshop/order/service/OrderServiceTest.java`
-
-<br>
-
-## 📁 패키지 구조
-
-```text
-com.baseshop
-├── member · login · security   # 회원, 인증(JWT), 권한
-├── board                       # 게시판
-├── product                     # 상품, 상품 이미지
-├── cart                        # 장바구니
-├── order
-│   ├── controller
-│   ├── facade                  # OrderFacade, OrderProcessor
-│   ├── service                 # 주문 도메인만
-│   └── entity · type · dto · repository
-├── payment
-│   ├── controller              # 결제완료, 웹훅
-│   ├── facade                  # PaymentFacade, PaymentProcessor
-│   ├── service                 # 결제 도메인만
-│   └── entity · type · dto · repository
-├── portone                     # 포트원 API 클라이언트, 웹훅 서명 검증
-├── scheduler                   # 결제 만료 배치, 파일 정리 배치
-└── common                      # 공통 응답, 예외 처리, 파일 저장, 설정
-```
-
-<br>
-
-## ▶ 로컬 실행
-
-**필요한 것** : JDK 17, MySQL 8.x, Redis 7
-
-```bash
-./gradlew bootRun --args='--spring.profiles.active=local'
-```
-
-- Swagger : `http://localhost:8080/swagger-ui/index.html`
-
-<details>
-<summary>설정 파일 (application-local.properties)</summary>
-
-설정 파일은 git에 올리지 않습니다. `src/main/resources/application-local.properties`를 만들고 아래 키를 채워주세요.
-
-```properties
-spring.datasource.url=
-spring.datasource.username=
-spring.datasource.password=
-spring.jpa.open-in-view=false
-spring.jpa.properties.hibernate.default_batch_fetch_size=100
-
-jwt.secret=
-jwt.access-token-expire-time=
-jwt.refresh-token-expire-time=
-jwt.access-token-name=
-jwt.refresh-token-name=
-jwt.cookie-secure=false
-
-file.dir=
-file.url=
-
-portone.api.base-url=https://api.portone.io
-portone.api.secret=
-portone.store.id=
-portone.channel.toss=
-portone.webhook-secret=
-
-batch.payment-expire-minutes=10
-batch.file-retention-days=7
-```
-
-- 로컬에서 웹훅을 받으려면 `cloudflared tunnel --url http://localhost:8080`으로 임시 HTTPS 주소를 만들어 포트원 콘솔에 등록합니다.
-
-</details>
+| 운영 모니터링에 데이터 없음 | 운영 설정에 actuator 노출 누락 → 수집 경로 500 | 운영 설정 추가, 수집 상태(`up`)로 확인 |
+| R2 업로드 403 | R2가 chunked encoding 미지원 | `chunkedEncodingEnabled(false)` |
 
 <br>
 
@@ -495,10 +251,32 @@ batch.file-retention-days=7
 
 | 현재 | 개선 방향 |
 | --- | --- |
-| 주문 생성 멱등성 없음 (두 번 클릭 시 주문 2개) | 버튼 비활성화 + Idempotency-Key |
-| 판매중지 상품 주문 차단 없음 | Product에 주문 가능 검증, 주문서 · 주문 생성에 적용 |
-| 웹훅 수신 이력 없음 | webhook-id 중복 기록, 처리 결과 추적 테이블 |
-| 배포 시 수십 초 중단 | Nginx upstream + 헬스체크 롤링 / 블루그린 배포 |
-| 테스트 부족, 이미지 빌드 시 테스트 생략 | 서비스 테스트 보강 → 테스트 통과 시에만 배포 |
-| 서버 1대 | 다중 인스턴스 시 스케줄러 중복 실행 방지(ShedLock) |
+| 주문 생성 멱등성 없음 | 버튼 비활성화 + Idempotency-Key |
+| 웹훅 수신 이력 없음 | webhook-id 중복 기록, 처리 결과 추적 |
+| 배포 시 수십 초 중단 | Nginx upstream 블루그린 배포 |
+| 테스트 부족 | 서비스 테스트 보강 → 통과 시에만 배포 |
 | DB 백업 없음 | mysqldump 정기 백업 |
+
+<details>
+<summary><b>그 밖의 설계 · 패키지 구조 · 로컬 실행</b></summary>
+
+**그 밖의 설계**
+- 인증 : JSON 로그인 `LoginFilter`, `JWTFilter` 검증, 재발급 시 쿠키와 Redis 값 비교, 로그아웃 시 Redis 키 삭제
+- 권한 2단계 : URL 권한은 Security, 데이터 권한(내 글 · 내 주문)은 서비스와 쿼리 조건. 남의 결제는 존재 여부를 숨기려고 404
+- 파일 : `FileStore` 인터페이스 + `@Profile`로 Local / R2 교체, 저장 실패 시 보상 삭제, 확장자 · Content-Type 검사
+- 조회 : LAZY + fetch join / `default_batch_fetch_size`, OSIV OFF
+- 예외 : `@RestControllerAdvice` + 공통 응답, 400 · 404 · 405 구분
+
+**패키지 구조**
+```text
+com.baseshop
+├── member · login · security   # 회원, 인증(JWT), 권한
+├── board · product · cart      # 게시판, 상품, 장바구니
+├── order · payment             # controller / facade(Facade, Processor) / service / entity
+├── portone                     # 포트원 API 클라이언트, 웹훅 서명 검증
+├── scheduler                   # 결제 만료 배치, 파일 정리 배치
+└── common                      # 공통 응답, 예외, 파일 저장, 엑셀
+```
+
+
+</details>
