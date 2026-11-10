@@ -7,7 +7,6 @@ import com.baseshop.cart.dto.CartUpdateReqDto;
 import com.baseshop.cart.service.CartService;
 import com.baseshop.common.dto.PagingResDto;
 import com.baseshop.common.handler.ApiResponse;
-import com.baseshop.product.dto.ProductListResDto;
 import com.baseshop.security.userdetails.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

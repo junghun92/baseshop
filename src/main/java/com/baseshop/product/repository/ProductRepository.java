@@ -1,6 +1,7 @@
 package com.baseshop.product.repository;
 
 import com.baseshop.product.entity.Product;
+import com.baseshop.product.type.ProductStatusType;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -21,4 +22,7 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Product p where p.id in :idList order by p.id")
     List<Product> findAllByIdInForUpdate(@Param("idList") List<Long> idList);
+
+    /** 사용자 상세용 : 사용자에게 보이는 상태의 상품만 */
+    Optional<Product> findByIdAndProductStatusTypeIn(Long id, List<ProductStatusType> productStatusTypeList);
 }

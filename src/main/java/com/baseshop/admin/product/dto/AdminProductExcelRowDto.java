@@ -1,4 +1,4 @@
-package com.baseshop.product.dto;
+package com.baseshop.admin.product.dto;
 
 import com.baseshop.common.excel.ExcelColumn;
 import com.baseshop.product.type.ProductStatusType;
@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 
 @Getter
 @NoArgsConstructor
-public class ProductExcelRowDto {
+public class AdminProductExcelRowDto {
     
     @ExcelColumn(header = "상품번호", order = 1, width = 10)
     private Long productId;
@@ -32,8 +32,8 @@ public class ProductExcelRowDto {
     @ExcelColumn(header = "등록일", order = 7, width = 20)
     private LocalDateTime regDate;
 
-    public ProductExcelRowDto(Long productId, String name, int price, int quantity,
-                              ProductStatusType productStatusType, String description, LocalDateTime regDate) {
+    public AdminProductExcelRowDto(Long productId, String name, int price, int quantity,
+                                   ProductStatusType productStatusType, String description, LocalDateTime regDate) {
         this.productId = productId;
         this.name = name;
         this.price = price;

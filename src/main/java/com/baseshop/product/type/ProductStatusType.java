@@ -1,15 +1,9 @@
 package com.baseshop.product.type;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonValue;
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
-import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import java.util.List;
 
 @Getter
 @RequiredArgsConstructor
@@ -19,6 +13,8 @@ public enum ProductStatusType {
     SOLD_OUT("품절"),
     STOP("판매중지");
 
+
+    public static final List<ProductStatusType> USER_VISIBLE = List.of(SALE, SOLD_OUT);
     private final String description;
 
 

@@ -1,11 +1,9 @@
 package com.baseshop.product.repository;
 
-import com.baseshop.product.dto.ProductExcelRowDto;
 import com.baseshop.product.dto.ProductListQueryDto;
 import com.baseshop.product.dto.ProductListReqDto;
 import com.baseshop.product.type.ProductStatusType;
 import com.querydsl.core.types.Projections;
-import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQuery;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
@@ -31,7 +29,7 @@ public class ProductQueryRepository {
         List<Long> idList = queryFactory
                 .select(product.id)
                 .from(product)
-                .where(getProductStatusTypeEq(productListReqDto.getProductStatusType()))
+                .where(product.productStatusType.in(ProductStatusType.USER_VISIBLE))
                 .orderBy(product.id.desc())
                 .offset(pageRequest.getOffset())
                 .limit(pageRequest.getPageSize())
@@ -46,7 +44,7 @@ public class ProductQueryRepository {
                 .leftJoin(productFile)
                 .on(productFile.product.eq(product),
                         productFile.delYn.eq("N")) //사용중인 이미지만
-                .where(getProductStatusTypeEq(productListReqDto.getProductStatusType()),
+                .where(product.productStatusType.in(ProductStatusType.USER_VISIBLE),
                         product.id.in(idList))
                 .orderBy(product.id.desc())
                 .fetch();
@@ -54,33 +52,9 @@ public class ProductQueryRepository {
         JPAQuery<Long> count = queryFactory
                 .select(product.count())
                 .from(product)
-                .where(getProductStatusTypeEq(productListReqDto.getProductStatusType()));
+                .where(product.productStatusType.in(ProductStatusType.USER_VISIBLE));
 
         return PageableExecutionUtils.getPage(content, pageRequest, count::fetchOne);
     }
 
-    private static BooleanExpression getProductStatusTypeEq(ProductStatusType productStatusType) {
-        return productStatusType != null ? product.productStatusType.eq(productStatusType) : null;
-    }
-
-    public List<ProductExcelRowDto> findExcelChunk(Long lastProductId, int size) {
-        return queryFactory
-                .select(Projections.constructor(ProductExcelRowDto.class,
-                        product.id,
-                        product.name,
-                        product.price,
-                        product.quantity,
-                        product.productStatusType,
-                        product.description,
-                        product.regDate))
-                .from(product)
-                .where(productIdGt(lastProductId))
-                .orderBy(product.id.asc())
-                .limit(size)
-                .fetch();
-    }
-
-    private BooleanExpression productIdGt(Long lastProductId) {
-        return lastProductId == null ? null : product.id.gt(lastProductId);
-    }
 }

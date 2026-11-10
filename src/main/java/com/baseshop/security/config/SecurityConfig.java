@@ -55,6 +55,8 @@ public class SecurityConfig {
                         // 나머지 액추에이터는 전부 차단
                         .requestMatchers("/actuator/**").denyAll()
 
+                        .requestMatchers("/api/v1/admin/**").hasAuthority("ADMIN") // 관리자
+
                         .requestMatchers(HttpMethod.POST, "/api/v1/login").permitAll() // 로그인
                         .requestMatchers(HttpMethod.POST, "/api/v1/logout").permitAll() // 로그아웃
                         .requestMatchers(HttpMethod.POST, "/api/v1/reissue").permitAll() // accessToken 재발급
@@ -65,16 +67,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/board/*").permitAll() // 게시글 조회
                         .requestMatchers(HttpMethod.GET, "/api/v1/board").permitAll() // 전체 게시글 조회
 
-                        .requestMatchers(HttpMethod.GET, "/api/v1/product/excel").hasAuthority("ADMIN") //상품 엑셀 다운로드
-                        .requestMatchers(HttpMethod.POST, "/api/v1/product").hasAuthority("ADMIN") // 상품등록
-                        .requestMatchers(HttpMethod.PUT, "/api/v1/product/*").hasAuthority("ADMIN") // 상품수정
-                        .requestMatchers(HttpMethod.DELETE, "/api/v1/product/*").hasAuthority("ADMIN") // 상품 판매중지
-                        .requestMatchers(HttpMethod.PUT, "/api/v1/product/*/quantity").hasAuthority("ADMIN") // 상품 재고수정
-                        .requestMatchers(HttpMethod.POST, "/api/v1/product/*/file").hasAnyAuthority("ADMIN") // 이미지 업로드
                         .requestMatchers(HttpMethod.GET, "/api/v1/product").permitAll() // 상품 리스트
                         .requestMatchers(HttpMethod.GET, "/api/v1/product/*").permitAll() // 상품상세
                         .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll() // 이미지 URL
-
 
                         .requestMatchers(HttpMethod.GET, "/api/v1/cart").hasAnyAuthority("USER", "ADMIN") // 내 장바구니 리스트
                         .requestMatchers(HttpMethod.POST, "/api/v1/cart").hasAnyAuthority("USER", "ADMIN") // 장바구니 등록

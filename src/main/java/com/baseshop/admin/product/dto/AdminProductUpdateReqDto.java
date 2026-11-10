@@ -1,4 +1,4 @@
-package com.baseshop.product.dto;
+package com.baseshop.admin.product.dto;
 
 import com.baseshop.product.type.ProductStatusType;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -10,7 +10,7 @@ import lombok.Data;
 
 @Data
 @AllArgsConstructor
-public class ProductUpdateReqDto {
+public class AdminProductUpdateReqDto {
 
     @NotBlank(message = "상품명을 입력해 주세요.")
     @Schema(description = "상품명", example = "테스트 상품1")

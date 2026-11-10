@@ -1,7 +1,6 @@
 package com.baseshop.product.entity;
 
 import com.baseshop.common.entity.BaseEntity;
-import com.baseshop.product.dto.ProductUpdateReqDto;
 import com.baseshop.product.type.ProductStatusType;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -44,11 +43,11 @@ public class Product extends BaseEntity {
         this.productStatusType = productStatusType;
     }
 
-    public void changeProduct(ProductUpdateReqDto productUpdateReqDto) {
-        this.name = productUpdateReqDto.getName();
-        this.description = productUpdateReqDto.getDescription();
-        this.price = productUpdateReqDto.getPrice();
-        this.productStatusType = productUpdateReqDto.getProductStatusType();
+    public void changeProduct(String name, String description, int price, ProductStatusType productStatusType) {
+        this.name = name;
+        this.description = description;
+        this.price = price;
+        this.productStatusType = productStatusType;
     }
 
     public void changeStatus(ProductStatusType productStatusType) {

@@ -1,8 +1,8 @@
-package com.baseshop.product.service;
+package com.baseshop.admin.product.service;
 
+import com.baseshop.admin.product.repository.AdminProductQueryRepository;
 import com.baseshop.common.excel.ExcelFile;
-import com.baseshop.product.dto.ProductExcelRowDto;
-import com.baseshop.product.repository.ProductQueryRepository;
+import com.baseshop.admin.product.dto.AdminProductExcelRowDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -12,13 +12,13 @@ import java.util.List;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class ProductExcelService {
+public class AdminProductExcelService {
 
     private static final int CHUNK_SIZE = 1000;
-    private final ProductQueryRepository productQueryRepository;
+    private final AdminProductQueryRepository adminProductQueryRepository;
 
-    public ExcelFile<ProductExcelRowDto> createProductExcel(){
-        ExcelFile<ProductExcelRowDto> excelFile = new ExcelFile<>(ProductExcelRowDto.class, "상품");
+    public ExcelFile<AdminProductExcelRowDto> createProductExcel(){
+        ExcelFile<AdminProductExcelRowDto> excelFile = new ExcelFile<>(AdminProductExcelRowDto.class, "상품");
 
         try {
             writeAllProduct(excelFile);
@@ -29,12 +29,12 @@ public class ProductExcelService {
         }
     }
 
-    private void writeAllProduct(ExcelFile<ProductExcelRowDto> excelFile) {
+    private void writeAllProduct(ExcelFile<AdminProductExcelRowDto> excelFile) {
         Long lastProductId = null;
 
         while (true){
             // 마지막 id 다음부터 1000건
-            List<ProductExcelRowDto> chunk = productQueryRepository.findExcelChunk(lastProductId, CHUNK_SIZE);
+            List<AdminProductExcelRowDto> chunk = adminProductQueryRepository.findExcelChunk(lastProductId, CHUNK_SIZE);
             if (chunk.isEmpty()) {
                 break;
             }
