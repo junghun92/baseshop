@@ -25,13 +25,13 @@ public class AdminProductService {
     private final FileStore fileStore;
 
     @Transactional
-    public Long create(AdminProductCreateReqDto productCreateReqDto) {
+    public Long create(AdminProductCreateReqDto adminProductCreateReqDto) {
         Product product = Product.builder()
-                .name(productCreateReqDto.getName())
-                .description(productCreateReqDto.getDescription())
-                .price(productCreateReqDto.getPrice())
-                .quantity(productCreateReqDto.getQuantity())
-                .productStatusType(productCreateReqDto.getProductStatusType())
+                .name(adminProductCreateReqDto.getName())
+                .description(adminProductCreateReqDto.getDescription())
+                .price(adminProductCreateReqDto.getPrice())
+                .quantity(adminProductCreateReqDto.getQuantity())
+                .productStatusType(adminProductCreateReqDto.getProductStatusType())
                 .build();
 
         return productRepository.save(product).getId();

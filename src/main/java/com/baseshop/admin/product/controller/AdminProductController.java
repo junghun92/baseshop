@@ -30,8 +30,8 @@ public class AdminProductController {
 
     @PostMapping
     @Operation(summary = "상품 등록")
-    public ApiResponse<Long> create(@Valid @RequestBody AdminProductCreateReqDto productCreateReqDto){
-        return ApiResponse.success(adminProductService.create(productCreateReqDto));
+    public ApiResponse<Long> create(@Valid @RequestBody AdminProductCreateReqDto adminProductCreateReqDto){
+        return ApiResponse.success(adminProductService.create(adminProductCreateReqDto));
     }
 
     @PutMapping("/{id}")

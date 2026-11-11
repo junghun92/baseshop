@@ -75,18 +75,3 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 }
-
-//Querydsl 설정
-def querydslDir = layout.buildDirectory.dir("generated/querydsl").get().asFile
-
-sourceSets {
-    main.java.srcDir querydslDir
-}
-
-tasks.withType(JavaCompile).configureEach {
-    options.getGeneratedSourceOutputDirectory().set(querydslDir)
-}
-
-clean {
-    delete file(querydslDir)
-}
