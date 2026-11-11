@@ -31,7 +31,7 @@ public class CouponController {
     @Operation(summary = "쿠폰 발급")
     public ApiResponse<Long> issueCoupon(@PathVariable Long id, @AuthenticationPrincipal CustomUserDetails userDetails){
         Long memberId = userDetails.getMemberId();
-        return ApiResponse.success(couponService.issueCoupon(id, memberId));
+        return ApiResponse.success(couponService.createIssuedCoupon(id, memberId));
     }
 
 }

@@ -7,11 +7,13 @@ import com.baseshop.coupon.entity.Coupon;
 import com.baseshop.coupon.entity.IssuedCoupon;
 import com.baseshop.coupon.repository.CouponRepository;
 import com.baseshop.coupon.repository.IssuedCouponRepository;
+import com.baseshop.coupon.service.issue.CouponIssuedProcessor;
 import com.baseshop.coupon.type.CouponIssueCheck;
 import com.baseshop.coupon.type.CouponStatusType;
 import com.baseshop.member.entity.Member;
 import com.baseshop.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,12 +23,19 @@ import java.util.List;
 import java.util.Set;
 
 @Service
-@RequiredArgsConstructor
 public class CouponService {
 
     private final CouponRepository couponRepository;
     private final IssuedCouponRepository issuedCouponRepository;
-    private final MemberRepository memberRepository;
+    private final CouponIssuedProcessor couponIssuedProcessor;
+
+    public CouponService(CouponRepository couponRepository,
+                         IssuedCouponRepository issuedCouponRepository,
+                         @Qualifier("pessimisticLockCouponIssueProcessor") CouponIssuedProcessor couponIssuedProcessor) {
+        this.couponRepository = couponRepository;
+        this.issuedCouponRepository = issuedCouponRepository;
+        this.couponIssuedProcessor = couponIssuedProcessor;
+    }
 
     @Transactional(readOnly = true)
     public List<CouponListResDto> getCouponList(Long memberId) {
@@ -49,38 +58,8 @@ public class CouponService {
     }
 
     @Transactional
-    public Long issueCoupon(Long id, Long memberId) {
-        LocalDateTime now = LocalDateTime.now();
-
-        // 쿠폰 조회
-        Coupon coupon = couponRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.COUPON_NOT_FOUND));
-
-        // 쿠폰 발급가능 여부 확인
-        boolean issued = issuedCouponRepository.existsByMemberIdAndCouponId(memberId, id);
-        validateIssue(coupon.checkIssue(issued, now));
-
-        // 쿠폰 발급 수량 +1
-        coupon.increaseIssuedQuantity();
-        
-        // 쿠폰 발급 저장
-        Member member = memberRepository.getReferenceById(memberId);
-        IssuedCoupon issuedCoupon = IssuedCoupon.builder()
-                .coupon(coupon)
-                .member(member)
-                .expireDate(now)
-                .build();
-        return issuedCouponRepository.save(issuedCoupon).getId();
+    public Long createIssuedCoupon(Long id, Long memberId) {
+        return couponIssuedProcessor.createIssuedCoupon(id, memberId);
     }
 
-    /** 쿠폰 발급가능 여부 확인 */
-    private void validateIssue(CouponIssueCheck couponIssueCheck) {
-        switch (couponIssueCheck) {
-            case UNAVAILABLE -> throw new BusinessException(ErrorCode.COUPON_UNAVAILABLE);
-            case ISSUED -> throw new BusinessException(ErrorCode.COUPON_ALREADY_ISSUED);
-            case UPCOMING -> throw new BusinessException(ErrorCode.COUPON_NOT_STARTED);
-            case SOLD_OUT -> throw new BusinessException(ErrorCode.COUPON_SOLD_OUT);
-            case AVAILABLE -> { }
-        }
-    }
 }
