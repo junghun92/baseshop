@@ -114,6 +114,17 @@ public class GlobalExceptionHandler {
         return ApiResponse.fail("REISSUE_FAILED", e.getMessage());
     }
 
+    /**
+     * [비즈니스 에러] ErrorCode 에 정의된 HTTP 상태와 코드로 응답
+     */
+    @ExceptionHandler(BusinessException.class)
+    public ApiResponse<Void> handleBusinessException(BusinessException e, HttpServletResponse response) {
+        ErrorCode errorCode = e.getErrorCode();
+        log.warn("비즈니스 에러 발생: {} - {}", errorCode.name(), errorCode.getMessage());
+        response.setStatus(errorCode.getHttpStatus().value());
+        return ApiResponse.fail(errorCode.name(), errorCode.getMessage());
+    }
+
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public ApiResponse<Void> exception(Exception e) {

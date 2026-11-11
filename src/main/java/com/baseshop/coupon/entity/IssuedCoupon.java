@@ -5,6 +5,7 @@ import com.baseshop.coupon.type.IssuedCouponStatusType;
 import com.baseshop.member.entity.Member;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -38,4 +39,13 @@ public class IssuedCoupon extends BaseEntity {
 
     @Column(nullable = false)
     private LocalDateTime expireDate;
+
+    @Builder
+    public IssuedCoupon(Coupon coupon, Member member, LocalDateTime expireDate) {
+        this.coupon = coupon;
+        this.member = member;
+        this.issuedCouponStatusType = IssuedCouponStatusType.ISSUED;
+        this.expireDate = expireDate.plusDays(coupon.getValidDays());
+    }
+
 }

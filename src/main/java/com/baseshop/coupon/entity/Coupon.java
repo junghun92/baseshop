@@ -1,6 +1,7 @@
 package com.baseshop.coupon.entity;
 
 import com.baseshop.common.entity.BaseEntity;
+import com.baseshop.coupon.type.CouponIssueCheck;
 import com.baseshop.coupon.type.CouponStatusType;
 import jakarta.persistence.*;
 import lombok.Builder;
@@ -86,5 +87,35 @@ public class Coupon extends BaseEntity {
     /** 쿠폰 발급 중지 */
     public void stop() {
         this.couponStatusType = CouponStatusType.STOPPED;
+    }
+
+    /** 발급이 시작되었는지 */
+    private boolean isStarted(LocalDateTime now) {
+        return !now.isBefore(this.issueStartDate);
+    }
+
+    /** 발급 수량을 다 채웠는지 */
+    private boolean isSoldOut() {
+        return this.issuedQuantity >= this.totalQuantity;
+    }
+
+    /** 발급할 수 있는 쿠폰인지 (ACTIVE 이고 발급 종료 전) */
+    private boolean isIssuePeriod(LocalDateTime now) {
+        return this.couponStatusType == CouponStatusType.ACTIVE
+                && now.isBefore(this.issueEndDate);
+    }
+
+    /** 발급 확인 */
+    public CouponIssueCheck checkIssue(boolean issued, LocalDateTime now) {
+        if (!isIssuePeriod(now)) return CouponIssueCheck.UNAVAILABLE;
+        if (issued) return CouponIssueCheck.ISSUED;
+        if (!isStarted(now)) return CouponIssueCheck.UPCOMING;
+        if (isSoldOut()) return CouponIssueCheck.SOLD_OUT;
+        return CouponIssueCheck.AVAILABLE;
+    }
+
+    /** 발급 수량 +1 */
+    public void increaseIssuedQuantity() {
+        this.issuedQuantity++;
     }
 }

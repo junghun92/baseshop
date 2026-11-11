@@ -83,6 +83,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/payment/complete").hasAnyAuthority("USER", "ADMIN") // 결제완료
                         .requestMatchers(HttpMethod.POST, "/api/v1/payment/webhook").permitAll() // 포트원 웹훅 (서명으로 검증)
 
+                        .requestMatchers(HttpMethod.GET, "/api/v1/coupon").hasAnyAuthority("USER", "ADMIN") // 쿠폰 리스트
+
                         .requestMatchers(HttpMethod.POST, "/api/v1/member").permitAll()
 
 
