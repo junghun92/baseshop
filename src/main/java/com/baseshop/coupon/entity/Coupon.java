@@ -114,8 +114,4 @@ public class Coupon extends BaseEntity {
         return CouponIssueCheck.AVAILABLE;
     }
 
-    /** 발급 수량 +1 */
-    public void increaseIssuedQuantity() {
-        this.issuedQuantity++;
-    }
 }

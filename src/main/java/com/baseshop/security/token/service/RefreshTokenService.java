@@ -1,6 +1,6 @@
 package com.baseshop.security.token.service;
 
-import com.baseshop.security.token.repository.RefreshTokenRepository;
+import com.baseshop.security.token.repository.RefreshTokenRedisRepository;
 import com.baseshop.security.util.JWTUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -9,17 +9,17 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class RefreshTokenService {
 
-    private final RefreshTokenRepository refreshTokenRepository;
+    private final RefreshTokenRedisRepository refreshTokenRedisRepository;
     private final JWTUtil jwtUtil;
 
     /** 로그인 성공시 redis 저장 */
     public void createRefreshToken(String username, String refreshToken){
-        refreshTokenRepository.save(username, refreshToken);
+        refreshTokenRedisRepository.save(username, refreshToken);
     }
 
     /** redis refreshToken 값이랑 검증 */
     public boolean isSameToken(String username, String refreshToken) {
-        return refreshTokenRepository.findByUsername(username)
+        return refreshTokenRedisRepository.findByUsername(username)
                 .map(str -> str.equals(refreshToken))
                 .orElse(false);
     }
@@ -32,7 +32,7 @@ public class RefreshTokenService {
 
         //redis 삭제
         String username = jwtUtil.getClaims(refreshToken).getSubject();
-        refreshTokenRepository.deleteByUsername(username);
+        refreshTokenRedisRepository.deleteByUsername(username);
     }
 
 

@@ -37,7 +37,7 @@ public class PessimisticLockCouponIssueProcessor implements CouponIssuedProcesso
         validateIssue(coupon.checkIssue(issued, now));
 
         // 쿠폰 발급 수량 +1
-        coupon.increaseIssuedQuantity();
+        couponRepository.incremantIssuedQuantity(id);
 
         // 쿠폰 발급 저장
         Member member = memberRepository.getReferenceById(memberId);

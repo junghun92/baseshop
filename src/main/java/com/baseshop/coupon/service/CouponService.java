@@ -1,18 +1,11 @@
 package com.baseshop.coupon.service;
 
-import com.baseshop.common.exception.BusinessException;
-import com.baseshop.common.exception.ErrorCode;
 import com.baseshop.coupon.dto.CouponListResDto;
 import com.baseshop.coupon.entity.Coupon;
-import com.baseshop.coupon.entity.IssuedCoupon;
 import com.baseshop.coupon.repository.CouponRepository;
 import com.baseshop.coupon.repository.IssuedCouponRepository;
 import com.baseshop.coupon.service.issue.CouponIssuedProcessor;
-import com.baseshop.coupon.type.CouponIssueCheck;
 import com.baseshop.coupon.type.CouponStatusType;
-import com.baseshop.member.entity.Member;
-import com.baseshop.member.repository.MemberRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,7 +24,7 @@ public class CouponService {
 
     public CouponService(CouponRepository couponRepository,
                          IssuedCouponRepository issuedCouponRepository,
-                         @Qualifier("pessimisticLockCouponIssueProcessor") CouponIssuedProcessor couponIssuedProcessor) {
+                         @Qualifier("redisLuaCouponIssueProcessor") CouponIssuedProcessor couponIssuedProcessor) {
         this.couponRepository = couponRepository;
         this.issuedCouponRepository = issuedCouponRepository;
         this.couponIssuedProcessor = couponIssuedProcessor;

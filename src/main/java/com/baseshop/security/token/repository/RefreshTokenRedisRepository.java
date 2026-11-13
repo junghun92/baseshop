@@ -8,14 +8,12 @@ import java.time.Duration;
 import java.util.Optional;
 
 @Repository
-public class RefreshTokenRepository {
-
-    private static final String KEY_PREFIX = "refresh:";
+public class RefreshTokenRedisRepository {
 
     private final StringRedisTemplate redisTemplate;
     private final Duration ttl;
 
-    public RefreshTokenRepository(
+    public RefreshTokenRedisRepository(
             StringRedisTemplate redisTemplate,
             @Value("${jwt.refresh-token-expire-time}") long refreshTokenExpireTime) {
         this.redisTemplate = redisTemplate;
@@ -24,16 +22,20 @@ public class RefreshTokenRepository {
 
     /** 저장 (같은 아이디면 덮어씀) */
     public void save(String username, String refreshToken){
-        redisTemplate.opsForValue().set(KEY_PREFIX + username, refreshToken, ttl);
+        redisTemplate.opsForValue().set(refreshTokenKey(username), refreshToken, ttl);
     }
 
     /** 조회 */
     public Optional<String> findByUsername(String username){
-        return Optional.ofNullable(redisTemplate.opsForValue().get(KEY_PREFIX + username));
+        return Optional.ofNullable(redisTemplate.opsForValue().get(refreshTokenKey(username)));
     }
 
     /** 삭제 */
     public void deleteByUsername(String username){
-        redisTemplate.delete(KEY_PREFIX + username);
+        redisTemplate.delete(refreshTokenKey(username));
+    }
+
+    private String refreshTokenKey(String username) {
+        return "refresh:" + username;
     }
 }
