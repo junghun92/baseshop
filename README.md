@@ -24,7 +24,7 @@ Spring Boot + JPA 기반 쇼핑몰 백엔드입니다.
 
 | 구분 | 기술 |
 | --- | --- |
-| Backend | Java 17, Spring Boot 4.1, Spring Data JPA, QueryDSL 5, Spring Security, JWT, Apache POI (SXSSF) |
+| Backend | Java 17, Spring Boot 4.1, Spring Data JPA, QueryDSL 5, Spring Security, JWT |
 | Database | MySQL 8.4, Redis 7 |
 | Infra | Ubuntu Server 24.04 (홈서버), Docker Compose, Nginx, GitHub Actions, GHCR |
 | Monitoring | Actuator, Micrometer, Prometheus, Grafana, Slack 알림, Cloudflare Tunnel + Access |
@@ -72,7 +72,8 @@ flowchart LR
 <details>
 <summary><b>ERD</b></summary>
 
-<img width="1397" height="803" alt="ERD" src="https://github.com/user-attachments/assets/f0e5a5c4-2c9b-403b-9a11-21c4e138a365" />
+<img width="1250" height="851" alt="캡처" src="https://github.com/user-attachments/assets/54ee836e-9ea3-4be2-aa3b-53946d4379b6" />
+
 
 </details>
 
@@ -206,8 +207,6 @@ sequenceDiagram
     R-->>S: 1 성공 / 0 매진 / -1 이미 받음
     alt 성공
         S->>D: 발급 저장 + issued_quantity + 1 (트랜잭션)
-        opt DB 저장 실패
-            S->>R: 보상 (회원 제거 + 재고 복구)
         end
     end
 ```
