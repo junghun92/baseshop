@@ -9,8 +9,9 @@ uploads/
 ### 비밀값 ###
 application*.properties
 
-### QueryDSL 생성 파일 (빌드할 때 자동 생성) ###
-src/main/generated/
+# 부하 테스트용
+scripts/load/tokens.json
+scripts/load/.env
 
 ### STS ###
 .apt_generated
