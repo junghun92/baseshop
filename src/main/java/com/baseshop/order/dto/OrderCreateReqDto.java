@@ -14,6 +14,9 @@ public class OrderCreateReqDto {
     @NotEmpty(message = "주문할 상품이 없습니다.")
     private List<OrderItemCreateReqDto> itemList = new ArrayList<>();
 
+    @Schema(description = "사용할 받은 쿠폰 번호 (쿠폰 안 쓰면 null)", example = "10")
+    private Long issuedCouponId;
+
     @Data
     public static class OrderItemCreateReqDto {
 

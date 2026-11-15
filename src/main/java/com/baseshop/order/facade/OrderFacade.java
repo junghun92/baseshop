@@ -1,5 +1,6 @@
 package com.baseshop.order.facade;
 
+import com.baseshop.coupon.service.IssuedCouponService;
 import com.baseshop.member.entity.Member;
 import com.baseshop.member.service.MemberService;
 import com.baseshop.order.dto.OrderCreateReqDto;
@@ -38,6 +39,7 @@ public class OrderFacade {
     private final PaymentService paymentService;
     private final PortOneClient portOneClient;
     private final OrderProcessor orderProcessor;
+    private final IssuedCouponService issuedCouponService;
 
     /** 주문생성 */
     @Transactional
@@ -55,8 +57,15 @@ public class OrderFacade {
         
         // 3. 주문 대기상태 저장 (주문상품 저장 + 재고 차감)
         Order order = orderService.create(member, itemList, productMap);
+
+        // 4. 쿠폰 사용 + 할인 적용
+        if (orderCreateReqDto.getIssuedCouponId() != null) {
+            long discountAmount = issuedCouponService.updateIssuedCouponUse(
+                    memberId, orderCreateReqDto.getIssuedCouponId(), order);
+            order.applyDiscount(discountAmount);
+        }
         
-        // 4. 결제 준비상태 저장
+        // 5. 결제 준비상태 저장
         Payment payment = paymentService.createReady(order);
 
         return OrderCreateResDto.builder()

@@ -15,7 +15,6 @@ public class OrderSheetReqDto {
 
     @Schema(description = "주문할 상품 목록")
     @NotEmpty(message = "주문할 상품이 없습니다.")
-    @Valid
     private List<OrderSheetItemReqDto> itemList = new ArrayList<>();
 
     @Data

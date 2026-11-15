@@ -48,7 +48,7 @@ public class RedisLuaCouponIssueProcessor implements CouponIssuedProcessor {
         IssuedCoupon issuedCoupon = IssuedCoupon.builder()
                 .coupon(coupon)
                 .member(member)
-                .expireDate(now)
+                .issuedDate(now)
                 .build();
         return issuedCouponRepository.save(issuedCoupon).getId();
     }

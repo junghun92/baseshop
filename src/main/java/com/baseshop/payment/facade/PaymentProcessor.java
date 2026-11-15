@@ -1,10 +1,11 @@
 package com.baseshop.payment.facade;
 
 import com.baseshop.cart.service.CartService;
+import com.baseshop.coupon.service.IssuedCouponService;
 import com.baseshop.order.entity.Order;
 import com.baseshop.order.type.OrderStatusType;
 import com.baseshop.payment.dto.PaymentCompleteResDto;
-import com.baseshop.payment.entity.PayMethodType;
+import com.baseshop.payment.type.PayMethodType;
 import com.baseshop.payment.entity.Payment;
 import com.baseshop.payment.service.PaymentService;
 import com.baseshop.portone.PortOneClient;
@@ -30,6 +31,7 @@ public class PaymentProcessor {
     private final ProductService productService;
     private final CartService cartService;
     private final PortOneClient portOneClient;
+    private final IssuedCouponService issuedCouponService;
 
     /** 포트원 결제 결과로 동기화 (결제완료, 웹훅 공통) */
     @Transactional
@@ -67,13 +69,14 @@ public class PaymentProcessor {
                 }
             }
             case FAILED -> {
-                // 결제실패 -> 주문실패 -> 재고복구
+                // 결제실패 -> 주문실패 -> 재고복구 -> 쿠폰복구
                 payment.fail(failReason, portOnePayment.getFailedDate());
                 order.transitTo(OrderStatusType.FAILED);
-                restoreStock(order);
+                productService.updateStockRestore(order.getOrderItemList());
+                issuedCouponService.updateIssuedCouponRestore(order.getId());
             }
             case CANCELLED -> {
-                // 결제 전 취소 (금액 불일치 환불 후 DB 반영 실패 등): 결제취소 -> 주문실패 -> 재고복구
+                // 결제 전 취소 (금액 불일치 환불 후 DB 반영 실패 등): 결제취소 -> 주문실패 -> 재고복구 -> 쿠폰복구
                 payment.cancel(
                         CancelRequesterType.ADMIN,
                         payment.getAmount(),
@@ -81,6 +84,7 @@ public class PaymentProcessor {
                         portOnePayment.getCancelledDate());
                 order.transitTo(OrderStatusType.FAILED);
                 productService.updateStockRestore(order.getOrderItemList());
+                issuedCouponService.updateIssuedCouponRestore(order.getId());
             }
             default -> {} // 결제 진행중 (결제창 닫음 등) -> 결과 나오면 웹훅이 처리
         }
@@ -91,14 +95,15 @@ public class PaymentProcessor {
         // portOne 결제상태
         // 결제 후 취소 (콘솔 취소, 주문취소 환불 후 DB 반영 실패)
         if (portOnePayment.isCancelled()) {
-            // 결제취소 → 주문취소 → 재고복구
+            // 결제취소 -> 주문취소 -> 재고복구 -> 쿠폰복구
             payment.cancel(
                     CancelRequesterType.ADMIN,
                     payment.getAmount(),
                     CancelReasonType.EXTERNAL_SYNC.getDescription(),
                     portOnePayment.getCancelledDate());
             order.transitTo(OrderStatusType.CANCELLED);
-            restoreStock(order);
+            productService.updateStockRestore(order.getOrderItemList());
+            issuedCouponService.updateIssuedCouponRestore(order.getId());
         }
     }
 
@@ -128,12 +133,10 @@ public class PaymentProcessor {
         order.transitTo(OrderStatusType.FAILED);
         
         // 재고복구
-        restoreStock(order);
-    }
-
-    /** 주문 상품 재고 복구 */
-    private void restoreStock(Order order) {
         productService.updateStockRestore(order.getOrderItemList());
+
+        // 쿠폰복구
+        issuedCouponService.updateIssuedCouponRestore(order.getId());
     }
 
     /** 결제 완료 후 장바구니에서 주문 상품 삭제 */
@@ -154,10 +157,11 @@ public class PaymentProcessor {
 
         Order order = payment.getOrder();
 
-        // 결제실패 -> 주문실패 -> 재고복구
+        // 결제실패 -> 주문실패 -> 재고복구 -> 쿠폰복구
         payment.fail("결제시간 만료 (10분)", LocalDateTime.now());
         order.transitTo(OrderStatusType.FAILED);
         productService.updateStockRestore(order.getOrderItemList());
+        issuedCouponService.updateIssuedCouponRestore(order.getId());
 
         log.info("결제 만료 처리완료 portonePaymentId={}", portonePaymentId);
     }

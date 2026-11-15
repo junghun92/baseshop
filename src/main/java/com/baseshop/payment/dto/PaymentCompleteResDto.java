@@ -2,7 +2,7 @@ package com.baseshop.payment.dto;
 
 import com.baseshop.order.entity.Order;
 import com.baseshop.order.type.OrderStatusType;
-import com.baseshop.payment.entity.PayMethodType;
+import com.baseshop.payment.type.PayMethodType;
 import com.baseshop.payment.entity.Payment;
 import com.baseshop.payment.type.PaymentStatusType;
 import io.swagger.v3.oas.annotations.media.Schema;

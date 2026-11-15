@@ -19,8 +19,14 @@ public class OrderListResDto {
     @Schema(description = "주문번호")
     private Long id;
 
-    @Schema(description = "주문별 총금액")
+    @Schema(description = "상품 금액 합계")
     private long totalPrice;
+
+    @Schema(description = "쿠폰 할인 금액 (쿠폰 안 쓰면 0)")
+    private long discountAmount;
+
+    @Schema(description = "최종 결제 금액 (상품 금액 - 쿠폰 할인)")
+    private long paymentAmount;
     
     @Schema(description = "주문상태 (ORDER: 주문, CANCEL: 취소)", example = "ORDER")
     private OrderStatusType orderStatusType;
@@ -34,6 +40,8 @@ public class OrderListResDto {
     public OrderListResDto(Order order) {
         this.id = order.getId();
         this.totalPrice = order.getTotalPrice();
+        this.discountAmount = order.getDiscountAmount();
+        this.paymentAmount = order.getPaymentAmount();
         this.orderStatusType = order.getOrderStatusType();
         this.orderDate = order.getRegDate();
         this.orderItemList = order.getOrderItemList().stream().map(OrderItemListResDto::new).toList();

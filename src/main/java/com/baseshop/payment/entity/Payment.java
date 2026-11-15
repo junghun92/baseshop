@@ -2,6 +2,7 @@ package com.baseshop.payment.entity;
 
 import com.baseshop.common.entity.BaseEntity;
 import com.baseshop.order.entity.Order;
+import com.baseshop.payment.type.PayMethodType;
 import com.baseshop.payment.type.PaymentStatusType;
 import com.baseshop.portone.type.CancelRequesterType;
 import jakarta.persistence.*;
@@ -62,7 +63,7 @@ public class Payment extends BaseEntity {
     private Payment (Order order) {
         this.order = order;
         this.portonePaymentId = "pay-" + UUID.randomUUID();
-        this.amount = order.getTotalPrice();
+        this.amount = order.getPaymentAmount();
         this.paymentStatusType = PaymentStatusType.READY;
     }
 

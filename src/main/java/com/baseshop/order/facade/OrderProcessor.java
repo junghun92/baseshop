@@ -1,5 +1,6 @@
 package com.baseshop.order.facade;
 
+import com.baseshop.coupon.service.IssuedCouponService;
 import com.baseshop.order.entity.Order;
 import com.baseshop.order.type.OrderStatusType;
 import com.baseshop.payment.entity.Payment;
@@ -20,6 +21,7 @@ public class OrderProcessor {
 
     private final PaymentService paymentService;
     private final ProductService productService;
+    private final IssuedCouponService issuedCouponService;
 
     /**
      * 주문취소 DB 반영
@@ -50,6 +52,9 @@ public class OrderProcessor {
 
         // 4. 재고복구
         productService.updateStockRestore(order.getOrderItemList());
+
+        // 5. 쿠폰복구
+        issuedCouponService.updateIssuedCouponRestore(order.getId());
     }
 
 }

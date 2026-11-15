@@ -33,6 +33,12 @@ public class Order extends BaseEntity {
     @Column(nullable = false)
     private long totalPrice;
 
+    @Column(nullable = false)
+    private long discountAmount;
+
+    @Column(nullable = false)
+    private long paymentAmount;
+
     @Column(nullable = false, columnDefinition = "varchar(20)")
     @Enumerated(EnumType.STRING)
     private OrderStatusType orderStatusType;
@@ -44,6 +50,8 @@ public class Order extends BaseEntity {
         Order order = new Order();
         order.member = member;
         order.totalPrice = 0L;
+        order.discountAmount = 0L;
+        order.paymentAmount = 0L;
         order.orderName = "";
         order.orderStatusType = OrderStatusType.PENDING;
         return order;
@@ -54,8 +62,22 @@ public class Order extends BaseEntity {
         OrderItem orderItem = new OrderItem(this, product, quantity);   // 같은 패키지라 접근 가능
         orderItemList.add(orderItem);
         totalPrice += orderItem.getTotalPrice();
+        paymentAmount = totalPrice - discountAmount;
         updateOrderName();
         return orderItem;
+    }
+
+    /**
+     * 쿠폰 할인 적용 (주문 상품을 다 담은 뒤 호출)
+     * - 결제 금액이 0원 이하가 되면 결제할 수 없어서 막는다.
+     */
+    public void applyDiscount(long discountAmount) {
+        if (discountAmount <= 0 || discountAmount >= this.totalPrice) {
+            throw new IllegalArgumentException(
+                    "할인 금액이 올바르지 않습니다. (할인 " + discountAmount + ", 상품 금액 " + this.totalPrice + ")");
+        }
+        this.discountAmount = discountAmount;
+        this.paymentAmount = this.totalPrice - discountAmount;
     }
 
     /** 상품 1건: "상품명", 2건 이상: "첫 상품명 외 N건" */

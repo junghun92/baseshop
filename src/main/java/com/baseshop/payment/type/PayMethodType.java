@@ -1,4 +1,4 @@
-package com.baseshop.payment.entity;
+package com.baseshop.payment.type;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
