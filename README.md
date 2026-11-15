@@ -207,7 +207,6 @@ sequenceDiagram
     R-->>S: 1 성공 / 0 매진 / -1 이미 받음
     alt 성공
         S->>D: 발급 저장 + issued_quantity + 1 (트랜잭션)
-        end
     end
 ```
 
