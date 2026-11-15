@@ -306,9 +306,7 @@ sequenceDiagram
 | --- | --- | --- |
 | 동시 주문 시 재고 불일치 | 같은 재고를 읽고 각자 차감 (갱신 손실) | 비관적 락 + 상품 ID 순서로 락 |
 | 환불은 됐는데 DB는 결제완료 | 환불 후 DB 반영 중 예외 → 롤백 | 웹훅이 포트원 상태로 동기화하는 규칙 추가 |
-| 결제 취소 성공인데 실패로 처리 | enum과 문자열을 `equals` 비교 → 항상 false | enum은 `==`로 비교 |
 | 배포 후 POST만 403 | Nginx가 Host 헤더를 바꿔 전달 → 다른 출처로 판단 | `proxy_set_header Host $http_host` |
-| 운영 모니터링에 데이터 없음 | 운영 설정에 actuator 노출 누락 → 수집 경로 500 | 운영 설정 추가, 수집 상태(`up`)로 확인 |
 | R2 업로드 403 | R2가 chunked encoding 미지원 | `chunkedEncodingEnabled(false)` |
 
 <br>
