@@ -15,6 +15,7 @@ Spring Boot + JPA 기반 쇼핑몰 백엔드입니다.
 | 대용량 페이징 | 게시글 100만 건, 뒤 페이지 조회를 커버링 인덱스(지연 조인)로 개선 | **9,427ms → 102ms** |
 | 대용량 엑셀 | 상품 10만 건 다운로드를 No Offset 청크 + SXSSF + 스트리밍으로 개선 | **힙 1.5GiB → 142MiB** |
 | 결제 정합성 | 결제완료 · 웹훅 · 만료 배치가 같은 동기화 규칙, 비관적 락 + 상태 전이 규칙 | 중복 처리 · 재고 이중 복구 차단 |
+| 선착순 쿠폰 | 비관적 락 → Redis Lua (재고 · 중복 판단을 Redis에서 원자적으로) | 동일 과부하에서 **처리량 약 1.9배**, 초과 발급 0건 |
 | 인프라 · 운영 | 홈서버 Ubuntu + Docker Compose, GitHub Actions 자동 배포, Prometheus · Grafana · Slack 알림 | 외부 공개 포트 80/443만 |
 
 <br>
@@ -46,7 +47,7 @@ flowchart LR
             N["Nginx<br>HTTPS · 정적 파일 · /api 프록시"]
             SP["Spring Boot"]
             DB[("MySQL")]
-            RD[("Redis<br>Refresh Token")]
+            RD[("Redis<br>Refresh Token · 쿠폰 재고")]
             PR["Prometheus"]
             GF["Grafana"]
             CFD["cloudflared"]
@@ -84,8 +85,9 @@ flowchart LR
 | 회원 · 인증 | 가입, 로그인, 로그아웃, 재발급 | Access / Refresh 분리, Refresh는 httpOnly 쿠키 + Redis(TTL) |
 | 게시판 | CRUD, 페이징 · 검색 | 작성자 본인만 수정 · 삭제, 100만 건 페이징 최적화 |
 | 상품 | 관리(관리자), 조회, 이미지, 엑셀 다운로드 | 소프트 삭제, 이미지는 R2, 엑셀은 메모리 일정 |
-| 장바구니 · 주문 | 담기, 주문 생성 · 취소 | 재고 선차감(비관적 락), 취소 시 환불 + 재고 복구 |
+| 장바구니 · 주문 | 담기, 주문 생성 · 취소, 쿠폰 적용 | 재고 선차감(비관적 락), 취소 · 실패 시 환불 + 재고 · 쿠폰 복구 |
 | 결제 | 결제완료, 웹훅, 만료 배치 | 포트원 재조회로 검증, 금액 불일치 자동 환불 |
+| 쿠폰 | 관리(관리자), 쿠폰 목록, 선착순 발급, 내 쿠폰함 | 1인 1매, Redis Lua 발급, 발급 방식 교체 가능(전략 패턴) |
 
 <details>
 <summary><b>API 목록</b></summary>
@@ -107,6 +109,10 @@ flowchart LR
 | PUT | `/api/v1/order/{id}/cancel` | 주문 취소 | USER, ADMIN |
 | POST | `/api/v1/payment/complete` | 결제완료 검증 | USER, ADMIN |
 | POST | `/api/v1/payment/webhook` | 포트원 웹훅 | 서명 검증 |
+| GET · POST · PUT | `/api/v1/admin/coupon`, `/api/v1/admin/coupon/{id}` | 쿠폰 목록 · 등록 · 수정 · 중지 | ADMIN |
+| GET | `/api/v1/coupon` | 쿠폰 목록 (발급 가능 여부 포함) | USER, ADMIN |
+| POST | `/api/v1/coupon/{id}/issue` | 쿠폰 발급 | USER, ADMIN |
+| GET | `/api/v1/issued-coupon` | 내 쿠폰함 | USER, ADMIN |
 
 </details>
 
@@ -185,6 +191,67 @@ flowchart LR
 
 <br>
 
+## 🎟 선착순 쿠폰 발급
+
+**문제** : 오픈 순간 수천 명이 동시에 요청 → 재고보다 많이 발급되거나, 한 사람이 여러 장 받을 수 있음
+
+```mermaid
+sequenceDiagram
+    participant U as 사용자
+    participant S as 서버
+    participant R as Redis
+    participant D as MySQL
+    U->>S: 발급 요청
+    S->>R: Lua 스크립트 (재고 확인 · 차감 + 중복 확인 · 기록)
+    R-->>S: 1 성공 / 0 매진 / -1 이미 받음
+    alt 성공
+        S->>D: 발급 저장 + issued_quantity + 1 (트랜잭션)
+        opt DB 저장 실패
+            S->>R: 보상 (회원 제거 + 재고 복구)
+        end
+    end
+```
+
+- **Redis Lua** : 재고(`coupon:{id}:stock`)와 받은 회원(`coupon:{id}:members`, Set) 확인 · 변경을 스크립트 하나로 실행 → 중간에 다른 요청이 끼어들 수 없음
+- **역할 분리** : 쿠폰 정보(기간, 금액)는 DB, 재고 · 중복 판단만 Redis. 쿠폰 등록 · 수정 시 Redis 재고를 같이 설정
+- **DB 저장은 Redis 다음, 트랜잭션은 짧게** : Redis 호출은 트랜잭션 밖, DB 저장만 `TransactionTemplate`으로. 발급 수량은 `UPDATE ... + 1`로 원자적 증가
+- **보상** : DB 저장이 실패하면 Redis에서 회원 제거 + 재고 복구 → 정합성 공식 `총 수량 = DB 발급 수 + Redis 남은 재고`
+- **최후 방어선** : `UNIQUE(member_id, coupon_id)`로 DB에서도 1인 1매 보장
+- **전략 패턴** : `CouponIssuedProcessor` 인터페이스에 비관적 락 / Redis Lua 구현체 → `@Qualifier`로 교체해 같은 조건에서 비교
+
+| 부하 테스트 (k6) | 비관적 락 | Redis Lua |
+| --- | --- | --- |
+| 초과 발급 | **0건** | **0건** |
+| 발급 수량 카운터 일치 | **일치** | **일치** |
+| 1인 1매 위반 | **0건** | **0건** |
+| 처리량 (완료 요청) | 초당 81건 | **초당 155건 (약 1.9배)** |
+| 응답 시간 p95 | 48.4초 | **36.9초** |
+| 매진까지 | 테스트 시간 안에 매진 못 함 | 매진 후 2,988건 즉시 거절 |
+
+- 비관적 락은 모든 요청이 쿠폰 행 락을 기다린 뒤에야 매진 · 중복을 판단 → 요청이 한 줄로 처리됨
+- Redis Lua는 매진 · 중복을 Redis에서 바로 거르고, 성공한 요청만 DB에 저장 → 같은 시간에 약 2배 처리
+- 두 방식 모두 PC가 포화된 과부하 상태라 응답 시간 절대값보다 **같은 조건에서의 상대 비교**로 해석
+
+<table>
+  <tr>
+    <td align="center"><img width="884" height="758" alt="쿠폰발급 테스트_비관적락" src="https://github.com/user-attachments/assets/63b7104f-225e-4de7-b180-c75c404fa207" />
+<br><b>비관적 락</b></td>
+    <td align="center"><img width="892" height="796" alt="쿠폰발급 테스트_redis" src="https://github.com/user-attachments/assets/8065aa91-4445-4d3b-a433-d12fd1cb16b1" />
+<br><b>Redis Lua</b></td>
+  </tr>
+</table>
+
+<details>
+<summary>측정 환경 · 방법</summary>
+
+- 로컬 단일 PC (서버 · MySQL · Redis · k6 동일 머신, k6는 Docker) → PC가 포화된 상태에서 측정 (목표 15만 건 중 비관적 락 약 4,900건, Redis Lua 약 8,000건만 처리)
+- 쿠폰 5,000장, 테스트 회원 2만 명 (재고의 4배), k6 `constant-arrival-rate` 초당 5,000건 × 30초
+- 로컬 단일 PC (서버 · MySQL · Redis · k6 동일 머신, k6는 Docker) → PC가 포화돼 실제 처리량은 초당 약 155건. 응답 시간보다 **과부하에서의 정확성** 확인이 목적
+- 판정은 k6 응답이 아니라 DB(`verify.sql`)와 Redis 값으로
+- 회원 FK 때문에 테스트 회원을 시드하고, 로그인 비용이 섞이지 않도록 토큰을 미리 발급
+- 스크립트 : [`scripts/load`](scripts/load)
+</details>
+
 ## 💳 주문 · 결제 설계
 
 ```mermaid
@@ -193,7 +260,7 @@ sequenceDiagram
     participant S as 서버
     participant P as 포트원
     F->>S: 주문 생성
-    Note over S: 상품 락 → 재고 차감 → 주문 PENDING, 결제 READY
+    Note over S: 상품 락 → 재고 차감 → 쿠폰 사용 처리 → 주문 PENDING, 결제 READY
     F->>P: 결제창 (SDK)
     F->>S: 결제완료 (/complete)
     P->>S: 웹훅
@@ -205,6 +272,7 @@ sequenceDiagram
 - **같은 동기화 규칙** : 결제완료 · 웹훅 · 만료 배치(10분 지난 READY)가 같은 메서드를 사용 → 어느 경로로 먼저 와도 결과가 같음
 - **동시성** : 재고는 상품 ID 순서로 비관적 락(데드락 방지), 결제는 행 락 + 락 안에서 상태 재확인 → 먼저 락을 잡은 쪽만 반영
 - **상태 전이 규칙** : 상태는 엔티티의 `transitTo()`에서만 바뀌고 허용되지 않은 전이는 예외 → 중복 완료 · 중복 취소(재고 이중 복구) 차단
+- - **쿠폰 적용** : 주문 생성 시 조건부 UPDATE(`ISSUED → USED`, 0건이면 이미 사용)로 동시에 같은 쿠폰을 써도 하나만 성공. 결제 금액은 `주문 금액 - 할인`을 서버가 계산. 재고가 복구되는 모든 경로(결제 실패 · 취소 · 만료 · 주문 취소)에서 쿠폰도 `USED → ISSUED` 복구
 - **Facade + Processor** : 서비스는 자기 도메인만, 여러 도메인 변경은 Processor 한 트랜잭션, **외부 API(포트원)는 트랜잭션 밖**에서 호출해 락과 커넥션을 오래 잡지 않음
 
 | 동시성 테스트 | 결과 |
@@ -274,6 +342,7 @@ com.baseshop
 ├── board · product · cart      # 게시판, 상품, 장바구니
 ├── order · payment             # controller / facade(Facade, Processor) / service / entity
 ├── portone                     # 포트원 API 클라이언트, 웹훅 서명 검증
+├── coupon                      # 쿠폰 관리 · 발급(service/issue : 비관적 락 · Redis Lua), 내 쿠폰함
 ├── scheduler                   # 결제 만료 배치, 파일 정리 배치
 └── common                      # 공통 응답, 예외, 파일 저장, 엑셀
 ```
