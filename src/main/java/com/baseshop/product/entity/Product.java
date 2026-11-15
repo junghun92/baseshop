@@ -11,6 +11,10 @@ import lombok.NoArgsConstructor;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@Table(indexes = @Index(
+        name = "idx_product_product_status_type",
+        columnList = "productStatusType"
+))
 public class Product extends BaseEntity {
 
     @Id

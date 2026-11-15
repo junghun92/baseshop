@@ -12,6 +12,10 @@ import lombok.NoArgsConstructor;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@Table(indexes = @Index(
+        name = "idx_board_board_tpye",
+        columnList = "boardType"
+))
 public class Board extends BaseEntity {
 
     @Id

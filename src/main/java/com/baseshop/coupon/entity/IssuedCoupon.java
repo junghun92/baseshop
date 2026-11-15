@@ -17,9 +17,8 @@ import java.time.LocalDateTime;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Table(
-        uniqueConstraints = @UniqueConstraint(
-                name = "uk_issued_coupon_member_coupon", columnNames = {"member_id", "coupon_id"})
+@Table(uniqueConstraints = @UniqueConstraint(
+        name = "uk_issued_coupon_member_coupon", columnNames = {"member_id", "coupon_id"})
 )
 public class IssuedCoupon extends BaseEntity {
 
