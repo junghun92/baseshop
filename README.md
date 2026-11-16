@@ -253,21 +253,6 @@ sequenceDiagram
 
 **문제** : 조회할 때마다 `UPDATE view_count + 1` 을 하면 조회 수만큼 DB 쓰기가 생기고, 인기글일수록 같은 행에 락이 몰림
 
-```mermaid
-sequenceDiagram
-    participant U as 사용자
-    participant S as 서버
-    participant R as Redis
-    participant D as MySQL
-    U->>S: 게시글 상세 조회
-    S->>R: ZINCRBY 누적 +1 / 오늘 +1 (TTL 8일)
-    R-->>S: 누적 조회수
-    opt 누적 조회수 % 100 == 0
-        S-)D: 별도 스레드(@Async)로 누적값 백업
-    end
-    S-->>U: 게시글 + 조회수
-```
-
 | 키 | 자료구조 | 용도 |
 | --- | --- | --- |
 | `board:viewCount` | Sorted Set (게시글 ID → 조회수) | 누적 조회수 표시, DB 백업 기준 |
