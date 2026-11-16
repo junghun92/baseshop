@@ -47,7 +47,7 @@ flowchart LR
             N["Nginx<br>HTTPS · 정적 파일 · /api 프록시"]
             SP["Spring Boot"]
             DB[("MySQL")]
-            RD[("Redis<br>Refresh Token · 쿠폰 재고")]
+            RD[("Redis<br>Refresh Token · 쿠폰 재고 · 조회수")]
             PR["Prometheus"]
             GF["Grafana"]
             CFD["cloudflared"]
@@ -84,7 +84,7 @@ flowchart LR
 | 도메인 | 기능 | 포인트 |
 | --- | --- | --- |
 | 회원 · 인증 | 가입, 로그인, 로그아웃, 재발급 | Access / Refresh 분리, Refresh는 httpOnly 쿠키 + Redis(TTL) |
-| 게시판 | CRUD, 페이징 · 검색 | 작성자 본인만 수정 · 삭제, 100만 건 페이징 최적화 |
+| 게시판 | CRUD, 페이징 · 검색, 조회수, 주간 인기글 | 작성자 본인만 수정 · 삭제, 100만 건 페이징 최적화, 조회수 Redis + 비동기 DB 백업 |
 | 상품 | 관리(관리자), 조회, 이미지, 엑셀 다운로드 | 소프트 삭제, 이미지는 R2, 엑셀은 메모리 일정 |
 | 장바구니 · 주문 | 담기, 주문 생성 · 취소, 쿠폰 적용 | 재고 선차감(비관적 락), 취소 · 실패 시 환불 + 재고 · 쿠폰 복구 |
 | 결제 | 결제완료, 웹훅, 만료 배치 | 포트원 재조회로 검증, 금액 불일치 자동 환불 |
@@ -99,6 +99,7 @@ flowchart LR
 | POST | `/api/v1/login` · `/logout` · `/reissue` | 로그인 · 로그아웃 · 재발급 | 누구나 |
 | GET | `/api/v1/board`, `/api/v1/board/{id}` | 게시글 목록 · 상세 | 누구나 |
 | POST · PUT · DELETE | `/api/v1/board`, `/api/v1/board/{id}` | 게시글 작성 · 수정 · 삭제 | USER, ADMIN |
+| GET | `/api/v1/board/rank` | 인기 게시글 (최근 7일 조회수 상위 5개) | 누구나 |
 | GET | `/api/v1/product`, `/api/v1/product/{id}` | 상품 목록 · 상세 | 누구나 |
 | POST · PUT · DELETE | `/api/v1/product`, `/api/v1/product/{id}` | 상품 등록 · 수정 · 삭제 | ADMIN |
 | PUT | `/api/v1/product/{id}/quantity` | 재고 증감 | ADMIN |
@@ -213,7 +214,6 @@ sequenceDiagram
 - **Redis Lua** : 재고(`coupon:{id}:stock`)와 받은 회원(`coupon:{id}:members`, Set) 확인 · 변경을 스크립트 하나로 실행 → 중간에 다른 요청이 끼어들 수 없음
 - **역할 분리** : 쿠폰 정보(기간, 금액)는 DB, 재고 · 중복 판단만 Redis. 쿠폰 등록 · 수정 시 Redis 재고를 같이 설정
 - **DB 저장은 Redis 다음, 트랜잭션은 짧게** : Redis 호출은 트랜잭션 밖, DB 저장만 `TransactionTemplate`으로. 발급 수량은 `UPDATE ... + 1`로 원자적 증가
-- **보상** : DB 저장이 실패하면 Redis에서 회원 제거 + 재고 복구 → 정합성 공식 `총 수량 = DB 발급 수 + Redis 남은 재고`
 - **최후 방어선** : `UNIQUE(member_id, coupon_id)`로 DB에서도 1인 1매 보장
 - **전략 패턴** : `CouponIssuedProcessor` 인터페이스에 비관적 락 / Redis Lua 구현체 → `@Qualifier`로 교체해 같은 조건에서 비교
 
@@ -244,12 +244,40 @@ sequenceDiagram
 
 - 로컬 단일 PC (서버 · MySQL · Redis · k6 동일 머신, k6는 Docker) → PC가 포화된 상태에서 측정 (목표 15만 건 중 비관적 락 약 4,900건, Redis Lua 약 8,000건만 처리)
 - 쿠폰 5,000장, 테스트 회원 2만 명 (재고의 4배), k6 `constant-arrival-rate` 초당 5,000건 × 30초
-- 로컬 단일 PC (서버 · MySQL · Redis · k6 동일 머신, k6는 Docker) → PC가 포화돼 실제 처리량은 초당 약 155건. 응답 시간보다 **과부하에서의 정확성** 확인이 목적
 - 판정은 k6 응답이 아니라 DB(`verify.sql`)와 Redis 값으로
 - 회원 FK 때문에 테스트 회원을 시드하고, 로그인 비용이 섞이지 않도록 토큰을 미리 발급
 - 스크립트 : [`scripts/load`](scripts/load)
 </details>
 
+## 👀 게시글 조회수 · 주간 인기글
+
+**문제** : 조회할 때마다 `UPDATE view_count + 1` 을 하면 조회 수만큼 DB 쓰기가 생기고, 인기글일수록 같은 행에 락이 몰림
+
+```mermaid
+sequenceDiagram
+    participant U as 사용자
+    participant S as 서버
+    participant R as Redis
+    participant D as MySQL
+    U->>S: 게시글 상세 조회
+    S->>R: ZINCRBY 누적 +1 / 오늘 +1 (TTL 8일)
+    R-->>S: 누적 조회수
+    opt 누적 조회수 % 100 == 0
+        S-)D: 별도 스레드(@Async)로 누적값 백업
+    end
+    S-->>U: 게시글 + 조회수
+```
+
+| 키 | 자료구조 | 용도 |
+| --- | --- | --- |
+| `board:viewCount` | Sorted Set (게시글 ID → 조회수) | 누적 조회수 표시, DB 백업 기준 |
+| `board:viewCount:yyyyMMdd` | Sorted Set, TTL 8일 | 일별 조회수 → 최근 7일 합산(`ZUNIONSTORE`)으로 주간 인기글 |
+
+- **조회수는 Redis가 원본** : 조회 시 DB 쓰기 없이 `ZINCRBY` 로 원자적 증가 → 동시 조회에도 갱신 손실 없음
+- **100회마다 DB 백업** : `ZINCRBY` 반환값으로 판단해 서버가 여러 대여도 100번째 요청 하나만 백업
+- **백업 테이블 분리** : `board_view_count` 별도 테이블 → 조회수 반영이 게시글 행에 락을 걸지 않음
+- **주간 인기글** : 일별 키를 TTL로 자동 정리, 조회 시 7일 합산 후 상위 5개 → 게시글은 `findAllById` 한 번으로 조회 후 순위 순서로 복원
+  
 ## 💳 주문 · 결제 설계
 
 ```mermaid
@@ -274,7 +302,6 @@ sequenceDiagram
 - **Facade + Processor** : 서비스는 자기 도메인만, 여러 도메인 변경은 Processor 한 트랜잭션, **외부 API(포트원)는 트랜잭션 밖**에서 호출해 락과 커넥션을 오래 잡지 않음
 
 | 동시성 테스트 | 결과 |
-| --- | --- |
 | 재고 100개 상품에 100건 동시 주문 | 재고 정확히 0 |
 | 재고 10개 상품에 30건 동시 주문 | 10건 성공, 20건 실패, 재고 음수 없음 |
 
@@ -335,7 +362,7 @@ sequenceDiagram
 ```text
 com.baseshop
 ├── member · login · security   # 회원, 인증(JWT), 권한
-├── board · product · cart      # 게시판, 상품, 장바구니
+├── board · product · cart      # 게시판(조회수 · 주간 인기글 : Redis), 상품, 장바구니
 ├── order · payment             # controller / facade(Facade, Processor) / service / entity
 ├── portone                     # 포트원 API 클라이언트, 웹훅 서명 검증
 ├── coupon                      # 쿠폰 관리 · 발급(service/issue : 비관적 락 · Redis Lua), 내 쿠폰함
