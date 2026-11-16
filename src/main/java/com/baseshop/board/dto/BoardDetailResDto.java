@@ -23,12 +23,16 @@ public class BoardDetailResDto {
     @Schema(description = "게시글 내용", example = "테스트 내용입니다.")
     private String content;
 
+    @Schema(description = "게시글 조회수", example = "10")
+    private Long viewCount;
+
     @Builder
-    public BoardDetailResDto(Long id, Long memberId, BoardType boardType, String title, String content) {
+    public BoardDetailResDto(Long id, Long memberId, BoardType boardType, String title, String content, Long viewCount) {
         this.id = id;
         this.memberId = memberId;
         this.boardType = boardType;
         this.title = title;
         this.content = content;
+        this.viewCount = viewCount;
     }
 }

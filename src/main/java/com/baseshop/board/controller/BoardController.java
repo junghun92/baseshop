@@ -13,6 +13,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @Slf4j
 @RestController
 @RequiredArgsConstructor
@@ -67,4 +69,11 @@ public class BoardController {
             BoardListReqDto boardListReqDto){
         return ApiResponse.success(boardService.getBoardList(boardListReqDto));
     }
+
+    @Operation(summary = "인기 게시글 조회", description = "최근 7일 조회수 상위 5개")
+    @GetMapping("/rank")
+    public ApiResponse<List<BoardRankResDto>> getBoardRankList() {
+        return ApiResponse.success(boardService.getBoardRankList());
+    }
+
 }

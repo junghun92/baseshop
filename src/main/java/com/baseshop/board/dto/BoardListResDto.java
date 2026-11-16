@@ -20,10 +20,14 @@ public class BoardListResDto {
     @Schema(description = "게시글 내용", example = "테스트 내용입니다.")
     private String content;
 
-    public BoardListResDto(Board board) {
+    @Schema(description = "게시글 조회수", example = "10")
+    private Long viewCount;
+
+    public BoardListResDto(Board board, Long viewCount) {
         this.id = board.getId();
         this.boardType = board.getBoardType();
         this.title = board.getTitle();
         this.content = board.getContent();
+        this.viewCount = viewCount;
     }
 }
