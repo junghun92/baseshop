@@ -45,6 +45,7 @@ public class PessimisticLockCouponIssueProcessor implements CouponIssuedProcesso
                 .coupon(coupon)
                 .member(member)
                 .issuedDate(now)
+                .validDays(coupon.getValidDays())
                 .build();
         return issuedCouponRepository.save(issuedCoupon).getId();
     }

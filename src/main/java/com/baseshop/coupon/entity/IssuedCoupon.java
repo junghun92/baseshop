@@ -49,11 +49,11 @@ public class IssuedCoupon extends BaseEntity {
     private LocalDateTime usedDate;
 
     @Builder
-    public IssuedCoupon(Coupon coupon, Member member, LocalDateTime issuedDate) {
+    public IssuedCoupon(Coupon coupon, Member member, LocalDateTime issuedDate, int validDays) {
         this.coupon = coupon;
         this.member = member;
         this.issuedCouponStatusType = IssuedCouponStatusType.ISSUED;
-        this.expireDate = issuedDate.plusDays(coupon.getValidDays());
+        this.expireDate = issuedDate.plusDays(validDays);
     }
 
     /**

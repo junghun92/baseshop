@@ -2,6 +2,7 @@ package com.baseshop.admin.coupon.service;
 
 import com.baseshop.admin.coupon.dto.*;
 import com.baseshop.admin.coupon.repository.AdminCouponQueryRepository;
+import com.baseshop.common.config.CacheConfig;
 import com.baseshop.common.dto.PagingResDto;
 import com.baseshop.common.exception.BusinessException;
 import com.baseshop.common.exception.ErrorCode;
@@ -9,6 +10,7 @@ import com.baseshop.coupon.entity.Coupon;
 import com.baseshop.coupon.repository.CouponIssuedRedisRepository;
 import com.baseshop.coupon.repository.CouponRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +43,7 @@ public class AdminCouponService {
         return coupon.getId();
     }
 
+    @CacheEvict(cacheNames = CacheConfig.COUPON_ISSUE, key = "#id")
     @Transactional
     public Long update(Long id, AdminCouponUpdateReqDto adminCouponUpdateReqDto) {
         validateIssuePeriod(adminCouponUpdateReqDto.getIssueStartDate(), adminCouponUpdateReqDto.getIssueEndDate());
@@ -76,6 +79,7 @@ public class AdminCouponService {
         return AdminCouponDetailResDto.from(coupon);
     }
 
+    @CacheEvict(cacheNames = CacheConfig.COUPON_ISSUE, key = "#id")
     @Transactional
     public Long delete(Long id) {
         Coupon coupon = couponRepository.findById(id).orElseThrow(() -> new BusinessException(ErrorCode.COUPON_NOT_FOUND));
