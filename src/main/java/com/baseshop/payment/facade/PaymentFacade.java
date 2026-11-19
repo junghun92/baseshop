@@ -48,7 +48,7 @@ public class PaymentFacade {
     public void updateWebhook(String paymentId) {
         // 결제 내역이 없으면 무시 (예외를 던지면 포트원이 재전송을 반복함)
         paymentService.findPayment(paymentId)
-                .ifPresent(pament -> sync(paymentId, pament));
+                .ifPresent(payment -> sync(paymentId, payment));
     }
 
     /** 동기화 (결제완료, 웹훅 공통) */

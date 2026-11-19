@@ -71,9 +71,7 @@ public class PaymentProcessor {
             case FAILED -> {
                 // 결제실패 -> 주문실패 -> 재고복구 -> 쿠폰복구
                 payment.fail(failReason, portOnePayment.getFailedDate());
-                order.transitTo(OrderStatusType.FAILED);
-                productService.updateStockRestore(order.getOrderItemList());
-                issuedCouponService.updateIssuedCouponRestore(order.getId());
+                updateOrderRestore(order, OrderStatusType.FAILED);
             }
             case CANCELLED -> {
                 // 결제 전 취소 (금액 불일치 환불 후 DB 반영 실패 등): 결제취소 -> 주문실패 -> 재고복구 -> 쿠폰복구
@@ -82,11 +80,9 @@ public class PaymentProcessor {
                         payment.getAmount(),
                         CancelReasonType.EXTERNAL_SYNC.getDescription(),
                         portOnePayment.getCancelledDate());
-                order.transitTo(OrderStatusType.FAILED);
-                productService.updateStockRestore(order.getOrderItemList());
-                issuedCouponService.updateIssuedCouponRestore(order.getId());
+                updateOrderRestore(order, OrderStatusType.FAILED);
             }
-            default -> {} // 결제 진행중 (결제창 닫음 등) -> 결과 나오면 웹훅이 처리
+            default -> {} // 결제 진행중 -> 결과 나오면 웹훅이 처리
         }
     }
 
@@ -101,9 +97,7 @@ public class PaymentProcessor {
                     payment.getAmount(),
                     CancelReasonType.EXTERNAL_SYNC.getDescription(),
                     portOnePayment.getCancelledDate());
-            order.transitTo(OrderStatusType.CANCELLED);
-            productService.updateStockRestore(order.getOrderItemList());
-            issuedCouponService.updateIssuedCouponRestore(order.getId());
+            updateOrderRestore(order, OrderStatusType.CANCELLED);
         }
     }
 
@@ -128,15 +122,8 @@ public class PaymentProcessor {
                 cancellation.getTotalAmount(),
                 cancellation.getReason(),
                 cancellation.getCancelledDate());
-        
-        // 주문실패
-        order.transitTo(OrderStatusType.FAILED);
-        
-        // 재고복구
-        productService.updateStockRestore(order.getOrderItemList());
 
-        // 쿠폰복구
-        issuedCouponService.updateIssuedCouponRestore(order.getId());
+        updateOrderRestore(order, OrderStatusType.FAILED);
     }
 
     /** 결제 완료 후 장바구니에서 주문 상품 삭제 */
@@ -159,11 +146,16 @@ public class PaymentProcessor {
 
         // 결제실패 -> 주문실패 -> 재고복구 -> 쿠폰복구
         payment.fail("결제시간 만료 (10분)", LocalDateTime.now());
-        order.transitTo(OrderStatusType.FAILED);
-        productService.updateStockRestore(order.getOrderItemList());
-        issuedCouponService.updateIssuedCouponRestore(order.getId());
+        updateOrderRestore(order, OrderStatusType.FAILED);
 
         log.info("결제 만료 처리완료 portonePaymentId={}", portonePaymentId);
+    }
+
+    /** 주문 실패·취소 + 재고·쿠폰 복구 (결제실패, 취소, 만료 공통) */
+    private void updateOrderRestore(Order order, OrderStatusType status) {
+        order.transitTo(status);
+        productService.updateStockRestore(order.getOrderItemList());
+        issuedCouponService.updateIssuedCouponRestore(order.getId());
     }
 
 }
