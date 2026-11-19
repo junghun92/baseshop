@@ -204,4 +204,162 @@ sequenceDiagram
     participant R as Redis
     participant D as MySQL
     U->>S: 발급 요청
-    S->>R:
+    S->>R: 쿠폰 정보 조회 (캐시, 없으면 DB 조회 후 저장)
+    Note over S: 발급 기간 · 상태 검사
+    S->>R: Lua 스크립트 (재고 확인 · 차감 + 중복 확인 · 기록)
+    R-->>S: 1 성공 / 0 매진 / -1 이미 받음
+    alt 성공
+        S->>D: 발급 저장 + issued_quantity + 1
+    end
+```
+
+- **Redis Lua** : 재고(`coupon:{id}:stock`)와 받은 회원(`coupon:{id}:members`, Set) 확인 · 변경을 스크립트 하나로 실행 → 중간에 다른 요청이 끼어들 수 없음
+- **쿠폰 정보 캐시 (Cache-Aside)** : 발급할 때마다 하던 쿠폰 조회를 Spring Cache(`@Cacheable`) + Redis 캐시로 대체 → 쿠폰 SELECT를 줄여 DB 부하 감소
+  - 발급 검사에 필요한 바뀌지 않는 값(상태 · 발급 기간 · 유효일수)만 DTO로 캐시, 매진 · 중복 판단은 그대로 Redis Lua
+  - 쿠폰 수정 · 중지 시 `@CacheEvict`로 캐시 삭제(커밋 이후), 캐시가 비었을 때 동시 요청은 `sync = true`로 DB 조회 한 번만
+- **역할 분리** : 쿠폰 정보(기간, 금액)는 DB, 재고 · 중복 판단만 Redis. 쿠폰 등록 · 수정 시 Redis 재고를 같이 설정
+- **DB 저장은 Redis 성공 후에만** : 매진 · 중복이면 DB 쓰기 없이 바로 거절. 발급 수량은 `UPDATE ... + 1`로 원자적 증가
+- **최후 방어선** : `UNIQUE(member_id, coupon_id)`로 DB에서도 1인 1매 보장
+- **전략 패턴** : `CouponIssuedProcessor` 인터페이스에 비관적 락 / Redis Lua 구현체 → `@Qualifier`로 교체해 같은 조건에서 비교
+
+| 부하 테스트 (k6) | 비관적 락 | Redis Lua |
+| --- | --- | --- |
+| 초과 발급 | **0건** | **0건** |
+| 발급 수량 카운터 일치 | **일치** | **일치** |
+| 1인 1매 위반 | **0건** | **0건** |
+| 처리량 (완료 요청) | 초당 81건 | **초당 155건 (약 1.9배)** |
+| 응답 시간 p95 | 48.4초 | **36.9초** |
+| 매진까지 | 테스트 시간 안에 매진 못 함 | 매진 후 2,988건 즉시 거절 |
+
+- 비관적 락은 모든 요청이 쿠폰 행 락을 기다린 뒤에야 매진 · 중복을 판단 → 요청이 한 줄로 처리됨
+- Redis Lua는 매진 · 중복을 Redis에서 바로 거르고, 성공한 요청만 DB에 저장 → 같은 시간에 약 2배 처리
+- 두 방식 모두 PC가 포화된 과부하 상태라 응답 시간 절대값보다 **같은 조건에서의 상대 비교**로 해석
+
+<table>
+  <tr>
+    <td align="center"><img width="884" height="758" alt="쿠폰발급 테스트_비관적락" src="https://github.com/user-attachments/assets/63b7104f-225e-4de7-b180-c75c404fa207" />
+<br><b>비관적 락</b></td>
+    <td align="center"><img width="892" height="796" alt="쿠폰발급 테스트_redis" src="https://github.com/user-attachments/assets/8065aa91-4445-4d3b-a433-d12fd1cb16b1" />
+<br><b>Redis Lua</b></td>
+  </tr>
+</table>
+
+<details>
+<summary>측정 환경 · 방법</summary>
+
+- 로컬 단일 PC (서버 · MySQL · Redis · k6 동일 머신, k6는 Docker) → PC가 포화된 상태에서 측정 (목표 15만 건 중 비관적 락 약 4,900건, Redis Lua 약 8,000건만 처리)
+- 쿠폰 5,000장, 테스트 회원 2만 명 (재고의 4배), k6 `constant-arrival-rate` 초당 5,000건 × 30초
+- 판정은 k6 응답이 아니라 DB(`verify.sql`)와 Redis 값으로
+- 회원 FK 때문에 테스트 회원을 시드하고, 로그인 비용이 섞이지 않도록 토큰을 미리 발급
+- 스크립트 : [`scripts/load`](scripts/load)
+</details>
+
+## 👀 게시글 조회수 · 주간 인기글
+
+**문제** : 조회할 때마다 `UPDATE view_count + 1` 을 하면 조회 수만큼 DB 쓰기가 생기고, 인기글일수록 같은 행에 락이 몰림
+
+| 키 | 자료구조 | 용도 |
+| --- | --- | --- |
+| `board:viewCount` | Sorted Set (게시글 ID → 조회수) | 누적 조회수 표시, DB 백업 기준 |
+| `board:viewCount:yyyyMMdd` | Sorted Set, TTL 8일 | 일별 조회수 → 최근 7일 합산(`ZUNIONSTORE`)으로 주간 인기글 |
+
+- **조회수는 Redis가 원본** : 조회 시 DB 쓰기 없이 `ZINCRBY` 로 원자적 증가 → 동시 조회에도 갱신 손실 없음
+- **100회마다 DB 백업** : `ZINCRBY` 반환값으로 판단해 서버가 여러 대여도 100번째 요청 하나만 백업
+- **백업 테이블 분리** : `board_view_count` 별도 테이블 → 조회수 반영이 게시글 행에 락을 걸지 않음
+- **주간 인기글** : 일별 키를 TTL로 자동 정리, 조회 시 7일 합산 후 상위 5개 → 게시글은 `findAllById` 한 번으로 조회 후 순위 순서로 복원
+  
+## 💳 주문 · 결제 설계
+
+```mermaid
+sequenceDiagram
+    participant F as 프론트
+    participant S as 서버
+    participant P as 포트원
+    F->>S: 주문 생성
+    Note over S: 상품 락 → 재고 차감 → 쿠폰 사용 처리 → 주문 PENDING, 결제 READY
+    F->>P: 결제창 (SDK)
+    F->>S: 결제완료 (/complete)
+    P->>S: 웹훅
+    Note over S: 둘 다 포트원에 다시 조회 → 같은 동기화 규칙
+    Note over S: 결제 행 락 → 상태 재확인 → 반영
+```
+
+- **검증** : 프론트 결과와 웹훅 body는 믿지 않고 항상 포트원에 다시 조회해 상태와 금액 확인, 금액이 다르면 자동 환불
+- **같은 동기화 규칙** : 결제완료 · 웹훅 · 만료 배치(10분 지난 READY)가 같은 메서드를 사용 → 어느 경로로 먼저 와도 결과가 같음
+- **동시성** : 재고는 상품 ID 순서로 비관적 락(데드락 방지), 결제는 행 락 + 락 안에서 상태 재확인 → 먼저 락을 잡은 쪽만 반영
+- **상태 전이 규칙** : 상태는 엔티티의 `transitTo()`에서만 바뀌고 허용되지 않은 전이는 예외 → 중복 완료 · 중복 취소(재고 이중 복구) 차단
+- **쿠폰 적용** : 주문 생성 시 조건부 UPDATE(`ISSUED → USED`, 0건이면 이미 사용)로 동시에 같은 쿠폰을 써도 하나만 성공. 결제 금액은 `주문 금액 - 할인`을 서버가 계산. 재고가 복구되는 모든 경로(결제 실패 · 취소 · 만료 · 주문 취소)에서 쿠폰도 `USED → ISSUED` 복구
+- **Facade + Processor** : 서비스는 자기 도메인만, 여러 도메인 변경은 Processor 한 트랜잭션, **외부 API(포트원)는 트랜잭션 밖**에서 호출해 락과 커넥션을 오래 잡지 않음
+
+| 동시성 테스트 | 결과 |
+| --- | --- |
+| 재고 100개 상품에 100건 동시 주문 | 재고 정확히 0 |
+| 재고 10개 상품에 30건 동시 주문 | 10건 성공, 20건 실패, 재고 음수 없음 |
+
+<details>
+<summary><b>동기화 규칙 · 복구 시나리오</b></summary>
+
+| DB 결제 상태 | 포트원 상태 | 처리 |
+| --- | --- | --- |
+| READY | PAID (금액 일치) | 결제완료 → 주문완료 → 장바구니 삭제 |
+| READY | PAID (금액 불일치) | 포트원 환불 → 결제취소 → 주문실패 → 재고복구 |
+| READY | FAILED | 결제실패 → 주문실패 → 재고복구 |
+| READY | CANCELLED | 결제취소 → 주문실패 → 재고복구 |
+| PAID | CANCELLED | 결제취소 → 주문취소 → 재고복구 (콘솔 취소 등) |
+| FAILED / CANCELLED | - | 변화 없음 |
+
+| 상황 | 복구 |
+| --- | --- |
+| 환불은 됐는데 DB 반영 실패 | 웹훅이 포트원 상태로 동기화 |
+| 웹훅이 끝내 안 옴 | 만료 배치가 포트원을 확인해서 동기화 |
+| 결제창만 열고 닫음 | 만료 배치가 결제실패 · 주문실패 · 재고복구 |
+
+</details>
+
+<br>
+
+## 🚨 트러블슈팅
+
+| 문제 | 원인 | 해결 |
+| --- | --- | --- |
+| 동시 주문 시 재고 불일치 | 같은 재고를 읽고 각자 차감 (갱신 손실) | 비관적 락 + 상품 ID 순서로 락 |
+| 환불은 됐는데 DB는 결제완료 | 환불 후 DB 반영 중 예외 → 롤백 | 웹훅이 포트원 상태로 동기화하는 규칙 추가 |
+| 배포 후 POST만 403 | Nginx가 Host 헤더를 바꿔 전달 → 다른 출처로 판단 | `proxy_set_header Host $http_host` |
+| R2 업로드 403 | R2가 chunked encoding 미지원 | `chunkedEncodingEnabled(false)` |
+
+<br>
+
+## 📝 한계와 개선 계획
+
+| 현재 | 개선 방향 |
+| --- | --- |
+| 주문 생성 멱등성 없음 | 버튼 비활성화 + Idempotency-Key |
+| 웹훅 수신 이력 없음 | webhook-id 중복 기록, 처리 결과 추적 |
+| 배포 시 수십 초 중단 | Nginx upstream 블루그린 배포 |
+| 테스트 부족 | 서비스 테스트 보강 → 통과 시에만 배포 |
+| DB 백업 없음 | mysqldump 정기 백업 |
+
+<details>
+<summary><b>그 밖의 설계 · 패키지 구조 · 로컬 실행</b></summary>
+
+**그 밖의 설계**
+- 인증 : JSON 로그인 `LoginFilter`, `JWTFilter` 검증, 재발급 시 쿠키와 Redis 값 비교, 로그아웃 시 Redis 키 삭제
+- 권한 2단계 : URL 권한은 Security, 데이터 권한(내 글 · 내 주문)은 서비스와 쿼리 조건. 남의 결제는 존재 여부를 숨기려고 404
+- 파일 : `FileStore` 인터페이스 + `@Profile`로 Local / R2 교체, 저장 실패 시 보상 삭제, 확장자 · Content-Type 검사
+- 조회 : LAZY + fetch join / `default_batch_fetch_size`, OSIV OFF
+- 예외 : `@RestControllerAdvice` + 공통 응답, 400 · 404 · 405 구분
+
+**패키지 구조**
+```text
+com.baseshop
+├── member · login · security   # 회원, 인증(JWT), 권한
+├── board · product · cart      # 게시판(조회수 · 주간 인기글 : Redis), 상품, 장바구니
+├── order · payment             # controller / facade(Facade, Processor) / service / entity
+├── portone                     # 포트원 API 클라이언트, 웹훅 서명 검증
+├── coupon                      # 쿠폰 관리 · 발급(service/issue : 비관적 락 · Redis Lua), 내 쿠폰함
+├── scheduler                   # 결제 만료 배치, 파일 정리 배치
+└── common                      # 공통 응답, 예외, 파일 저장, 엑셀
+```
+
+
+</details>
