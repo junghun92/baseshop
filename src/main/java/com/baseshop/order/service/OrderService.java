@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -31,10 +32,11 @@ public class OrderService {
     /** 주문생성 */
     @Transactional
     public Order create(Member member,
+                        String idempotencyKey,
                         List<OrderCreateReqDto.OrderItemCreateReqDto> itemList,
                         Map<Long, Product> productMap) {
         // 주문 생성 (주문대기)
-        Order order = Order.createPending(member);
+        Order order = Order.createPending(member, idempotencyKey);
 
         // 주문상품 생성, 상품 재고차감
         List<OrderItem> orderItemList = new ArrayList<>();
@@ -48,6 +50,11 @@ public class OrderService {
         orderItemRepository.saveAll(orderItemList);
 
         return order;
+    }
+
+    /** 멱등성 키로 이미 생성된 주문 조회 */
+    public Optional<Order> findByIdempotencyKey(Long memberId, String idempotencyKey) {
+        return orderRepository.findByMemberIdAndIdempotencyKey(memberId, idempotencyKey);
     }
 
     /** 주문 리스트 */

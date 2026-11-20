@@ -26,10 +26,11 @@ public class OrderController {
     @Operation(summary = "주문 등록")
     public ApiResponse<OrderCreateResDto> create(
             @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
             @Valid @RequestBody OrderCreateReqDto orderCreateReqDto) {
         Long memberId = userDetails.getMemberId();
 
-        return ApiResponse.success(orderFacade.create(memberId, orderCreateReqDto));
+        return ApiResponse.success(orderFacade.create(memberId, idempotencyKey, orderCreateReqDto));
     }
 
     @PostMapping("/sheet")

@@ -73,4 +73,11 @@ public class PaymentService {
 
         return payment.getPortonePaymentId();
     }
+
+    /** 주문의 결제 조회 */
+    @Transactional(readOnly = true)
+    public Payment getPaymentByOrderId(Long orderId) {
+        return paymentRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new EntityNotFoundException("결제정보가 없습니다."));
+    }
 }

@@ -7,6 +7,7 @@ import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -112,6 +113,13 @@ public class GlobalExceptionHandler {
         log.warn("토큰 재발급 실패: {}", e.getMessage());
         response.addHeader(HttpHeaders.SET_COOKIE, jwtUtil.deleteRefreshCookie().toString());
         return ApiResponse.fail("REISSUE_FAILED", e.getMessage());
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ApiResponse<Void> handleDataIntegrityViolation(DataIntegrityViolationException e) {
+        log.warn("데이터 무결성 위반 (중복 요청 등): {}", e.getMostSpecificCause().getMessage());
+        return ApiResponse.fail("DUPLICATE_REQUEST", "이미 처리 중인 요청입니다. 잠시 후 다시 확인해주세요.");
     }
 
     /**

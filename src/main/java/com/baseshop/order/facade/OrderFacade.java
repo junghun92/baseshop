@@ -1,5 +1,7 @@
 package com.baseshop.order.facade;
 
+import com.baseshop.common.exception.BusinessException;
+import com.baseshop.common.exception.ErrorCode;
 import com.baseshop.coupon.service.IssuedCouponService;
 import com.baseshop.member.entity.Member;
 import com.baseshop.member.service.MemberService;
@@ -26,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -43,7 +46,18 @@ public class OrderFacade {
 
     /** 주문생성 */
     @Transactional
-    public OrderCreateResDto create(Long memberId, OrderCreateReqDto orderCreateReqDto) {
+    public OrderCreateResDto create(Long memberId, String idempotencyKey, OrderCreateReqDto orderCreateReqDto) {
+        // 0. 같은 키로 이미 생성된 주문 확인
+        Optional<Order> createdOrder = orderService.findByIdempotencyKey(memberId, idempotencyKey);
+        if (createdOrder.isPresent()) {
+            Order order = createdOrder.get();
+            // 결제 대기 중인 주문만 그대로 반환 (끝난 주문의 키 재사용은 거절)
+            if (!order.isPending()) {
+                throw new BusinessException(ErrorCode.ORDER_IDEMPOTENCY_KEY_USED);
+            }
+            return OrderCreateResDto.of(order, paymentService.getPaymentByOrderId(order.getId()));
+        }
+
         List<OrderCreateReqDto.OrderItemCreateReqDto> itemList = orderCreateReqDto.getItemList();
 
         // 1. 회원조회
@@ -56,7 +70,7 @@ public class OrderFacade {
         Map<Long, Product> productMap = productService.getProductMapForUpdate(productIdList);
         
         // 3. 주문 대기상태 저장 (주문상품 저장 + 재고 차감)
-        Order order = orderService.create(member, itemList, productMap);
+        Order order = orderService.create(member, idempotencyKey, itemList, productMap);
 
         // 4. 쿠폰 사용 + 할인 적용
         if (orderCreateReqDto.getIssuedCouponId() != null) {
@@ -68,12 +82,7 @@ public class OrderFacade {
         // 5. 결제 준비상태 저장
         Payment payment = paymentService.createReady(order);
 
-        return OrderCreateResDto.builder()
-                .orderId(order.getId())
-                .portonePaymentId(payment.getPortonePaymentId())
-                .totalAmount(payment.getAmount())
-                .orderName(order.getOrderName())
-                .build();
+        return OrderCreateResDto.of(order, payment);
     }
 
     /** 주문서 조회 */

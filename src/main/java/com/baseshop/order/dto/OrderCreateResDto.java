@@ -1,5 +1,7 @@
 package com.baseshop.order.dto;
 
+import com.baseshop.order.entity.Order;
+import com.baseshop.payment.entity.Payment;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Data;
@@ -19,11 +21,12 @@ public class OrderCreateResDto {
     @Schema(description = "총 주문금액")
     private long totalAmount;
 
-    @Builder
-    public OrderCreateResDto(Long orderId, String portonePaymentId, String orderName, long totalAmount) {
-        this.orderId = orderId;
-        this.portonePaymentId = portonePaymentId;
-        this.orderName = orderName;
-        this.totalAmount = totalAmount;
+    public static OrderCreateResDto of(Order order, Payment payment) {
+        OrderCreateResDto response = new OrderCreateResDto();
+        response.orderId = order.getId();
+        response.portonePaymentId = payment.getPortonePaymentId();
+        response.orderName = order.getOrderName();
+        response.totalAmount = order.getTotalPrice();
+        return response;
     }
 }

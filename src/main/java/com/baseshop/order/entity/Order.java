@@ -15,7 +15,10 @@ import java.util.List;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Table(name = "orders")
+@Table(name = "orders", uniqueConstraints = @UniqueConstraint(
+        name = "uk_orders_member_idempotency_key",
+        columnNames = {"member_id", "idempotency_key"}
+))
 public class Order extends BaseEntity {
 
     @Id
@@ -46,15 +49,24 @@ public class Order extends BaseEntity {
     @OneToMany(mappedBy = "order")
     private List<OrderItem> orderItemList = new ArrayList<>();
 
-    public static Order createPending(Member member) {
+    @Column(length = 64)
+    private String idempotencyKey; // 주문 생성 멱등성 키 (같은 회원 + 같은 키 = 같은 주문)
+
+    public static Order createPending(Member member, String idempotencyKey) {
         Order order = new Order();
         order.member = member;
+        order.idempotencyKey = idempotencyKey;
         order.totalPrice = 0L;
         order.discountAmount = 0L;
         order.paymentAmount = 0L;
         order.orderName = "";
         order.orderStatusType = OrderStatusType.PENDING;
         return order;
+    }
+
+    /** 결제 대기 중인 주문인지 */
+    public boolean isPending() {
+        return this.orderStatusType == OrderStatusType.PENDING;
     }
 
     /** 주문상품 추가: 생성 + 양방향 연결 + 총액 누적을 한 번에 */

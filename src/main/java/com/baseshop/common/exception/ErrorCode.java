@@ -20,7 +20,10 @@ public enum ErrorCode {
     // 받은 쿠폰
     ISSUED_COUPON_NOT_FOUND(HttpStatus.NOT_FOUND, "사용할 수 있는 쿠폰이 없습니다."),
     ISSUED_COUPON_NOT_USABLE(HttpStatus.CONFLICT, "이미 사용했거나 기간이 지난 쿠폰입니다."),
-    COUPON_MIN_ORDER_AMOUNT_NOT_MET(HttpStatus.BAD_REQUEST, "쿠폰 최소 주문 금액을 충족하지 않습니다.");
+    COUPON_MIN_ORDER_AMOUNT_NOT_MET(HttpStatus.BAD_REQUEST, "쿠폰 최소 주문 금액을 충족하지 않습니다."),
+
+    // 주문
+    ORDER_IDEMPOTENCY_KEY_USED(HttpStatus.CONFLICT, "이미 처리된 주문입니다. 주문서를 다시 열어 주세요.");
 
     private final HttpStatus httpStatus;
     private final String message;
