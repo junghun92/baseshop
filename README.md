@@ -86,7 +86,7 @@ flowchart LR
 | 회원 · 인증 | 가입, 로그인, 로그아웃, 재발급 | Access / Refresh 분리, Refresh는 httpOnly 쿠키 + Redis(TTL) |
 | 게시판 | CRUD, 페이징 · 검색, 조회수, 주간 인기글 | 작성자 본인만 수정 · 삭제, 100만 건 페이징 최적화, 조회수 Redis + 비동기 DB 백업 |
 | 상품 | 관리(관리자), 조회, 이미지, 엑셀 다운로드 | 소프트 삭제, 이미지는 R2, 엑셀은 메모리 일정 |
-| 장바구니 · 주문 | 담기, 주문 생성 · 취소, 쿠폰 적용 | 재고 선차감(비관적 락), 취소 · 실패 시 환불 + 재고 · 쿠폰 복구 |
+| 장바구니 · 주문 | 담기, 주문 생성 · 취소, 쿠폰 적용 | 재고 선차감(비관적 락), 주문 생성 멱등성 키, 취소 · 실패 시 환불 + 재고 · 쿠폰 복구 |
 | 결제 | 결제완료, 웹훅, 만료 배치 | 포트원 재조회로 검증, 금액 불일치 자동 환불 |
 | 쿠폰 | 관리(관리자), 쿠폰 목록, 선착순 발급, 내 쿠폰함 | 1인 1매, Redis Lua 발급, 쿠폰 정보 캐시, 발급 방식 교체 가능(전략 패턴) |
 
@@ -106,7 +106,7 @@ flowchart LR
 | POST | `/api/v1/product/{id}/file` | 상품 이미지 업로드 | ADMIN |
 | GET | `/api/v1/product/excel` | 상품 전체 엑셀 다운로드 | ADMIN |
 | GET · POST · PUT · DELETE | `/api/v1/cart` | 장바구니 | USER, ADMIN |
-| POST | `/api/v1/order/sheet`, `/api/v1/order` | 주문서, 주문 생성 | USER, ADMIN |
+| POST | `/api/v1/order/sheet`, `/api/v1/order` | 주문서, 주문 생성 (`Idempotency-Key` 헤더) | USER, ADMIN |
 | GET | `/api/v1/order` | 주문 목록 | USER, ADMIN |
 | PUT | `/api/v1/order/{id}/cancel` | 주문 취소 | USER, ADMIN |
 | POST | `/api/v1/payment/complete` | 결제완료 검증 | USER, ADMIN |
@@ -275,7 +275,7 @@ sequenceDiagram
     participant F as 프론트
     participant S as 서버
     participant P as 포트원
-    F->>S: 주문 생성
+    F->>S: 주문 생성 (Idempotency-Key)
     Note over S: 상품 락 → 재고 차감 → 쿠폰 사용 처리 → 주문 PENDING, 결제 READY
     F->>P: 결제창 (SDK)
     F->>S: 결제완료 (/complete)
@@ -284,6 +284,10 @@ sequenceDiagram
     Note over S: 결제 행 락 → 상태 재확인 → 반영
 ```
 
+- **주문 생성 멱등성** : 주문서 진입 시 프론트가 만든 `Idempotency-Key`를 주문에 함께 저장, `UNIQUE(member_id, idempotency_key)`
+  - 같은 키로 다시 오면(더블 클릭 · 재전송) 새로 만들지 않고 기존 주문 결과 반환. 결제 대기(PENDING) 주문만 재사용하고, 끝난 주문의 키는 409
+  - 동시에 같은 키가 들어오면 UNIQUE 위반으로 트랜잭션 전체 롤백 → 재고 · 쿠폰 이중 차감 없음
+  - 주문 생성은 외부 API(PG) 호출 없이 DB 안에서 끝나서, 별도 저장소 없이 DB 유니크 + 롤백으로 처리
 - **검증** : 프론트 결과와 웹훅 body는 믿지 않고 항상 포트원에 다시 조회해 상태와 금액 확인, 금액이 다르면 자동 환불
 - **같은 동기화 규칙** : 결제완료 · 웹훅 · 만료 배치(10분 지난 READY)가 같은 메서드를 사용 → 어느 경로로 먼저 와도 결과가 같음
 - **동시성** : 재고는 상품 ID 순서로 비관적 락(데드락 방지), 결제는 행 락 + 락 안에서 상태 재확인 → 먼저 락을 잡은 쪽만 반영
@@ -312,7 +316,6 @@ sequenceDiagram
 | --- | --- |
 | 환불은 됐는데 DB 반영 실패 | 웹훅이 포트원 상태로 동기화 |
 | 웹훅이 끝내 안 옴 | 만료 배치가 포트원을 확인해서 동기화 |
-| 결제창만 열고 닫음 | 만료 배치가 결제실패 · 주문실패 · 재고복구 |
 
 </details>
 
@@ -333,7 +336,6 @@ sequenceDiagram
 
 | 현재 | 개선 방향 |
 | --- | --- |
-| 주문 생성 멱등성 없음 | 버튼 비활성화 + Idempotency-Key |
 | 웹훅 수신 이력 없음 | webhook-id 중복 기록, 처리 결과 추적 |
 | 배포 시 수십 초 중단 | Nginx upstream 블루그린 배포 |
 | 테스트 부족 | 서비스 테스트 보강 → 통과 시에만 배포 |
